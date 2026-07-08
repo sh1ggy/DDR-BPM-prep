@@ -1,0 +1,4 @@
+# Songs not contained in the packs above; downloaded into one of the version folders.
+# Format (tab-separated): simfileid	version	title (comment only)
+7568	2nd	PARANOiA KCET ~clean mix~
+38006	3rd	LOVE THIS FEELIN'

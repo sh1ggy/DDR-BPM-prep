@@ -1,0 +1,13 @@
+# Deprecated/duplicate song-titles: delete this version's copy after unpacking.
+# Format (tab-separated): song-title	version (folder name)
+DYNAMITE RAVE	3rd
+DYNAMITE RAVE (AIR Special)	SuperNOVA2
+Happy	X
+ever snow	MAX2
+La Bamba	EXTREME
+CAPTAIN JACK (GRANDALE REMIX)	3rd
+DAM DARIRAM	3rd
+FANTASY	MAX
+HERO	2nd
+IF YOU WERE HERE	2nd
+LONG TRAIN RUNNIN'	MAX2

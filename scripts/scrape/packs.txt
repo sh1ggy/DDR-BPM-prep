@@ -1,0 +1,23 @@
+# DDR pack categoryids on ZiV, one per DDR version.
+# Format (tab-separated): categoryid	version (folder name)
+# Find ids at https://zenius-i-vanisher.com/v5.2/viewsimfilecategory.php?categoryid=<id>
+1709	WORLD
+1509	A3
+1293	A20 PLUS
+1292	A20
+1148	A
+864	2014
+845	2013
+802	X3
+546	X2
+295	X
+77	SuperNOVA2
+1	SuperNOVA
+41	EXTREME
+31	MAX2
+40	MAX
+30	5th
+39	4th
+38	3rd
+32	2nd
+37	1st

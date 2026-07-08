@@ -4,8 +4,9 @@ import simfile
 # from simfile import timing
 # from simfile import notes
 
-# from simfile.notes import NoteData, count
 # from simfile.notes.timed import time_notes
+from simfile.notes import NoteData
+from simfile.notes.count import count_steps
 from simfile.timing import Beat, TimingData
 from simfile.timing.engine import TimingEngine
 
@@ -70,6 +71,7 @@ class SimfileParser:
             "per_chart": self.per_chart,
         }
         self.levels_data = self.parseLevels()
+        self.notecounts_data = self.parseNotecounts()
         self.chart_data = self.parseCharts()
 
     def isPerChart(self):
@@ -96,6 +98,18 @@ class SimfileParser:
             elif chart.stepstype == "dance-single":
                 sp_levels[chart.difficulty.lower()] = int(chart.meter)
         return {"sp": sp_levels, "dp": dp_levels}
+
+    def parseNotecounts(self):
+        # steps as counted in-game: a jump counts as one step
+        sp_counts = {}
+        dp_counts = {}
+        for chart in self.charts:
+            notecount = count_steps(NoteData(chart))
+            if chart.stepstype == "dance-double":
+                dp_counts[chart.difficulty.lower()] = notecount
+            elif chart.stepstype == "dance-single":
+                sp_counts[chart.difficulty.lower()] = notecount
+        return {"sp": sp_counts, "dp": dp_counts}
 
     def parseCharts(self):
         data = []

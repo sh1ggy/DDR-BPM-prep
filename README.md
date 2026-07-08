@@ -52,6 +52,13 @@ Rely on `Makefile` targets imported from `Makefiles/*.mk` for the 3 main steps o
 ```shell
 make full_scrape
 ```
+The scraper is driven by tab-separated config files in `scripts/scrape/`:
+- `packs.txt` — categoryid per DDR version. Each pack's zip filename is resolved
+  from the 302 `Location` header of
+  `https://zenius-i-vanisher.com/v5.2/download.php?type=ddrpack&categoryid=<id>`
+  and recorded in `data/downloaded.txt`; unchanged packs are skipped on re-runs.
+- `songs.txt` — standalone simfileids not contained in any pack.
+- `deprecated.txt` — deprecated/duplicate song-titles to delete after unpacking.
 
 ### Process and write data
 ```shell
@@ -74,10 +81,3 @@ make predeploy
 - Use `ptpython` for a better REPL (see [official repo](https://github.com/prompt-toolkit/ptpython?tab=readme-ov-file#embedding-the-repl) on setting up a PYTHONSTARTUP).
 
 # Improvements Ideas
-- Automate scraping simfiles
-    - maintain list of categoryid (one for each DDR version)
-        - Example: A3 GET `https://zenius-i-vanisher.com/v5.2/download.php?type=ddrpack&categoryid=1509`)
-    - Check response header:
-        - Example: 302 Found `Location: ../zip/pack_1509_3038f1.zip`     
-    - maintain list of downloaded filenames (probably unique?)
-    - maintain list of deprecated song-titles

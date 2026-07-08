@@ -51,6 +51,7 @@ def addChartData(songs: list) -> None:
         # save dict
         song.update(parser.song_data)
         song.update(parser.levels_data)
+        song["notecounts"] = parser.notecounts_data
         song["charts"] = parser.chart_data
 
 
