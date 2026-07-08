@@ -10,7 +10,7 @@ pieces fit together. It is written for a human reading the code for the first ti
 **DDR-BPM-prep is a data pipeline.** It takes *simfiles* (the community file format that
 describes Dance Dance Revolution songs and their step charts) from the fan site
 [Zenius-I-Vanisher](https://zenius-i-vanisher.com), and turns them into clean,
-compact JSON data plus downscaled artwork. The results are published as a GitHub
+compact JSON data plus jacket artwork (full-res and 160x160). The results are published as a GitHub
 release, where they are consumed by a companion app (the `DDR-BPM-assets` git
 submodule points at that downstream repo).
 
@@ -24,7 +24,7 @@ The pipeline has **three stages**, each with its own Makefile and scripts:
 ```
  1. SCRAPE                    2. PARSE                        3. DEPLOY
  ─────────                    ────────                        ─────────
- Download .zip song packs     Read every simfile, extract     Downscale jacket art,
+ Download .zip song packs     Read every simfile, extract     Stage jacket art (full + 160),
  from Zenius-I-Vanisher       BPM/stops/levels, write JSON    zip everything, push a
  and unzip into ./data/       into ./build/                   GitHub release
  (shell scripts)              (Python)                        (shell + ImageMagick + gh)
@@ -70,8 +70,9 @@ DDR-BPM-prep/
 │   ├── songs/               # One JSON file per song (full chart detail)
 │   ├── summaries/           # summary.json + grouped indexes (by name/version/level)
 │   ├── courses/             # dan_sp.json, dan_dp.json, ddr.json, life4.json
+│   ├── jackets/             # full-resolution jacket art (predeploy output)
 │   ├── jackets-160/         # 160×160 downscaled jacket art (predeploy output)
-│   └── *.zip                # songs.zip, jackets.zip — release artefacts
+│   └── *.zip                # songs.zip, jackets.zip, jackets-full.zip — release artefacts
 ├── log/                     # log.txt (main log), removed.txt (removal suspects)
 ├── pyproject.toml           # Poetry project; Python ^3.11
 └── DDR-BPM-assets           # Git submodule: the downstream repo that consumes releases
@@ -107,7 +108,7 @@ three stage makefiles. Key targets:
 | `make parse` | Parse | Sanity-check the song list, then generate all song + course JSON |
 | `make load` | Parse | Load the generated JSON into an interactive Python REPL for inspection |
 | `make write` | Parse | Re-generate the summary files from already-built song JSON |
-| `make predeploy` | Deploy | Downscale jackets, zip artefacts (`FORCE=Y` via `predeploy-force` to redo images) |
+| `make predeploy` | Deploy | Stage full-res + 160 jackets, zip artefacts (`FORCE=Y` via `predeploy-force` to redo images) |
 | `make release` | Deploy | Push `build/*.zip` + song lists as the GitHub release tagged `Latest` |
 | `make main` | All | `clobber` → `parse` → `predeploy` (the everything-after-scraping shortcut) |
 | `make clean` / `make clobber` | — | Delete logs / also delete inner zips and built JSON |
@@ -305,11 +306,13 @@ its display title, relevant SP/DP level(s), and BPM range. Output:
 ## 6. Stage 3 — Deploy (`Makefiles/deploy.mk` + `scripts/deploy/`)
 
 - **[predeploy.sh](scripts/deploy/predeploy.sh)** — builds the release artefacts:
-  1. For every song in `all_songs.txt`, find its `-jacket.png` in `data/` and use
-     ImageMagick `convert` to downscale it to 160×160 into `build/jackets-160/`
-     (skipping ones already done unless `FORCE=Y`, i.e. `make predeploy-force`).
-     A missing or ambiguous jacket aborts the run.
-  2. Zip `build/songs/` → `build/songs.zip` and the jackets → `build/jackets.zip` (7z).
+  1. For every song in `all_songs.txt`, find its `-jacket.png` in `data/`, copy it to
+    `build/jackets/` (full resolution), and use ImageMagick `convert` to create a
+    160×160 version in `build/jackets-160/` (skipping ones already done unless
+    `FORCE=Y`, i.e. `make predeploy-force`). A missing or ambiguous jacket aborts
+    the run.
+  2. Zip `build/songs/` → `build/songs.zip`, `build/jackets-160/` → `build/jackets.zip`,
+    and `build/jackets/` → `build/jackets-full.zip` (7z).
   3. Copy `all_songs.txt` and `removed.txt` into `build/` so they ship with the release.
 
 - **[release.sh](scripts/deploy/release.sh)** (`make release`) — after an interactive
@@ -344,7 +347,7 @@ Konami releases a new song, or removes some:
    edits, then the song and course JSON are rebuilt into `build/`.
 4. `make load` — optional: poke at the `songs` list in a REPL to spot-check a song
    (`locSong(summary, "paranoia")`).
-5. `make predeploy` — downscale any new jackets, rebuild the zips.
+5. `make predeploy` — stage any new full-res/160 jackets, rebuild the zips.
 6. `make release` — replace the `Latest` GitHub release; the DDR-BPM app picks it up.
 
 ---

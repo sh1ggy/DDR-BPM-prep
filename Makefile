@@ -8,7 +8,7 @@ include Makefiles/scraper.mk
 include Makefiles/parser.mk
 include Makefiles/deploy.mk
 
-# Run after scraping (parse & downscale jackets)
+# Run after scraping (parse & prepare full-res + 160 jackets)
 main: clobber parse predeploy
 
 release:

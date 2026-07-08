@@ -28,6 +28,23 @@ Runs on Python 3.11.4 on MacOS M1.
 poetry install
 ```
 
+If parsing fails with `ModuleNotFoundError: No module named 'icu'`, install
+PyICU into the active Poetry env:
+
+```shell
+# macOS (Homebrew ICU is required for building PyICU)
+brew install pkg-config icu4c
+export PATH=/opt/homebrew/opt/icu4c/bin:$PATH
+export PATH=/opt/homebrew/opt/icu4c/sbin:$PATH
+export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/opt/homebrew/opt/icu4c/lib/pkgconfig
+
+# then install into Poetry env
+poetry add pyicu
+```
+
+The parser now includes a fallback that keeps `make parse` working without
+PyICU, but Japanese title collation quality is better with PyICU installed.
+
 ## Folder structure & Workflow
 Rely on `Makefile` targets imported from `Makefiles/*.mk` for the 3 main steps of the workflow:
 
@@ -65,16 +82,52 @@ The scraper is driven by tab-separated config files in `scripts/scrape/`:
 make parse
 ```
 
+Parser output includes a `radar` payload on each chart entry in the song JSON:
+
+```json
+{
+    "charts": [
+        {
+            "dominant_bpm": 180,
+            "bpm_range": "90~180~360",
+            "bpms": [],
+            "stops": [],
+            "radar": {
+                "stream": 61.234,
+                "voltage": 47.889,
+                "air": 22.101,
+                "freeze": 31.004,
+                "chaos": 55.762
+            }
+        }
+    ]
+}
+```
+
+`radar` values are generated during parse from the StepMania note/timing data
+using formulas adapted from
+https://github.com/sugoku/groove-radar-calculator (MIT).
+
 ### Load data to inspect
 ```shell
 make load
 ```
 
 ### Build assets for deployment
-Currently this only involves downscaling jackets.
+This stages jacket assets in both full resolution and 160x160 variants.
 ```shell
 make predeploy
 ```
+
+`predeploy` resolves jacket images by exact `-jacket.png` name first, then
+falls back to normalized matching (ignores punctuation/symbol differences) when
+copying/downscaling. This helps keep output stable even when source jacket file
+names differ slightly from song names.
+
+Outputs:
+- `build/jackets/` (full resolution, renamed to `<song>.png`)
+- `build/jackets-160/` (downscaled 160x160)
+- `build/jackets-full.zip` and `build/jackets.zip`
 
 # Quality of Life
 - Use `ipdb.set_trace()` for debugging.
