@@ -72,6 +72,7 @@ class SimfileParser:
         }
         self.levels_data = self.parseLevels()
         self.notecounts_data = self.parseNotecounts()
+        self.radar_data = self.parseRadars()
         self.chart_data = self.parseCharts()
 
     def isPerChart(self):
@@ -141,12 +142,22 @@ class SimfileParser:
         data["stops"] = [
             self.processStop(timing_eng, stop) for stop in timing_data.stops
         ]
-        data["radar"] = self.parseRadar(chart, timing_data)
 
         return [data]
 
-    # Groove radar formulas adapted from
-    # https://github.com/sugoku/groove-radar-calculator (MIT).
+    def parseRadars(self):
+        # radar is a per-chart quantity: group by style/difficulty like levels
+        sp = {}
+        dp = {}
+        for chart in self.charts:
+            radar = self.parseRadar(chart, TimingData(self.simfile, chart))
+            if chart.stepstype == "dance-double":
+                dp[chart.difficulty.lower()] = radar
+            elif chart.stepstype == "dance-single":
+                sp[chart.difficulty.lower()] = radar
+        return {"sp": sp, "dp": dp}
+
+    # Groove radar formulas per https://remywiki.com/GROOVE_RADAR
     def parseRadar(self, chart, timing_data):
         note = self._radarNoteData(chart)
         is_double = chart.stepstype == "dance-double"
@@ -168,15 +179,16 @@ class SimfileParser:
         freeze = self._grFreeze(note, is_double)
         chaos = self._grChaos(note, bpms, stops, is_double)
 
-        def _clamp(v):
-            return float(_fmt(max(0.0, min(100.0, v))))
+        # no upper clamp: official radar values exceed 100 (up to ~312)
+        def _pos(v):
+            return float(_fmt(max(0.0, v)))
 
         return {
-            "stream": _clamp(stream),
-            "voltage": _clamp(voltage),
-            "air": _clamp(air),
-            "freeze": _clamp(freeze),
-            "chaos": _clamp(chaos),
+            "stream": _pos(stream),
+            "voltage": _pos(voltage),
+            "air": _pos(air),
+            "freeze": _pos(freeze),
+            "chaos": _pos(chaos),
         }
 
     def _songLenForRadar(self):
@@ -195,7 +207,8 @@ class SimfileParser:
         return measures
 
     def _sum1and2(self, arr):
-        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v"]
+        # steps + shock arrows ("M" rows), a jump counting as one step
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v", "M"]
         summed = 0
         for beat in arr:
             for note in beat:
@@ -223,7 +236,7 @@ class SimfileParser:
             return 0.0
         gm_num = len(arr[0][0])
         last = [-1.0 for _ in range(gm_num)]
-        total = 0.0
+        holds = []
         for beat in range(len(arr)):
             for note in range(len(arr[beat])):
                 curr = beat + (note / len(arr[beat]))
@@ -232,63 +245,56 @@ class SimfileParser:
                     if lane_note == "2" or lane_note == "4":
                         last[lane] = curr
                     elif lane_note == "3" and last[lane] != -1:
-                        total += curr - last[lane]
+                        holds.append((last[lane], curr - last[lane]))
                         last[lane] = -1
-        return total
+        # freezes starting simultaneously: only the longer one counts
+        by_start = {}
+        for start, dur in holds:
+            by_start[start] = max(by_start.get(start, 0.0), dur)
+        return sum(by_start.values())
 
-    def _noteToFract(self, arr):
-        valid = ["1", "2", "4", "M", "X", "x", "Y", "y", "S", "v"]
-        fract = []
-        last = 0.0
+    def _chaosBaseValue(self, arr):
+        # per-note base value: note color x arrows / interval from last note;
+        # (quantization / interval-in-quantization-units) reduces to 1 / the
+        # interval in measures. First note contributes 0.
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v"]
+        base = 0.0
+        last = None
         for beat in range(len(arr)):
             for note in range(len(arr[beat])):
-                n = arr[beat][note]
-                if any(x in n for x in valid):
-                    color = 5
-                    fraction = note / len(arr[beat])
-                    if fraction % 0.25 == 0:
-                        color = 0
-                    elif fraction % 0.125 == 0:
-                        color = 2
-                    elif fraction % 0.0625 == 0:
-                        color = 4
-                    current = beat + fraction
-                    fract.append([color, current - last])
-                    last = current
-        return fract
+                row = arr[beat][note]
+                arrows = sum(row.count(x) for x in valid) + row.count("M")
+                if arrows == 0:
+                    continue
+                fraction = note / len(arr[beat])
+                if fraction % 0.25 == 0:
+                    color = 0.0
+                elif fraction % 0.125 == 0:
+                    color = 0.5
+                elif fraction % 0.0625 == 0:
+                    color = 1.0
+                else:
+                    color = 1.25
+                current = beat + fraction
+                if last is not None:
+                    dist = current - last
+                    if dist > 0:
+                        base += color * arrows / dist
+                last = current
+        return base
 
-    def _getBpmChanges(self, bpms, stops):
-        stop_events = [[float(s[0]), 0.0, float(s[1])] for s in stops]
-        bpm_events = [[float(b[0]), float(b[1]), 0.0] for b in bpms]
-        all_events = bpm_events + stop_events
-        all_events.sort(key=lambda x: (x[0], -x[2]))
-
-        if not all_events:
-            return []
-
-        # Build the BPM-change sequence without mutating the source list while
-        # iterating: this avoids pathological growth around stop events.
-        out = []
-        last_nonzero_bpm = next((e[1] for e in all_events if e[1] > 0), 120.0)
-        for i, (beat, bpm, stop_dur) in enumerate(all_events):
-            if bpm > 0:
-                last_nonzero_bpm = bpm
-                out.append(bpm)
-                continue
-
-            # Stop marker itself.
-            out.append(0.0)
-
-            # If the stop ends before the next event, synthesize a resume BPM
-            # marker at stop end (same behavior the original code intended).
-            if i + 1 < len(all_events):
-                next_beat = all_events[i + 1][0]
-                if beat + stop_dur < next_beat:
-                    out.append(last_nonzero_bpm)
-
-        # Mirror upstream behavior: ignore decimal BPMs that are not on 0.5
-        # increments.
-        return [b for b in out if b == 0 or b % 0.5 == 0]
+    def _totalBpmDelta(self, bpms, stops):
+        # sum of |BPM changes|; each stop contributes the BPM in effect after
+        # it (a change landing exactly on a stop is covered by the stop rule)
+        stop_beats = {float(s[0]) for s in stops}
+        delta = 0.0
+        for (_, val), (beat2, val2) in zip(bpms[:-1], bpms[1:]):
+            if beat2 not in stop_beats:
+                delta += abs(val - val2)
+        for stop_beat in stop_beats:
+            after = [val for beat, val in bpms if beat <= stop_beat]
+            delta += after[-1] if after else bpms[0][1]
+        return delta
 
     def _grStream(self, note, is_double):
         npm = int((60.0 * self._sum1and2(note)) / self._songLenForRadar())
@@ -299,15 +305,19 @@ class SimfileParser:
         return (npm - 139) * 100 / 161
 
     def _grVoltage(self, note):
-        avgbpm = 60.0 * len(note) / self._songLenForRadar()
+        # peak density = max steps in any 4 consecutive beats (not measures)
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v", "M"]
+        beats = []
+        for measure in note:
+            per_beat = [0, 0, 0, 0]
+            for i, row in enumerate(measure):
+                if sum(row.count(x) for x in valid) >= 1:
+                    per_beat[int(i * 4 / len(measure))] += 1
+            beats.extend(per_beat)
+        avgbpm = 60.0 * len(beats) / self._songLenForRadar()
         maxdensity = 0
-        i = 0
-        for i in range(len(note) - 4):
-            temp = self._sum1and2(note[i : i + 4])
-            if temp > maxdensity:
-                maxdensity = temp
-        if i == 0:
-            maxdensity = self._sum1and2(note)
+        for i in range(max(1, len(beats) - 3)):
+            maxdensity = max(maxdensity, sum(beats[i : i + 4]))
         avg_peak_density = int(avgbpm * maxdensity / 4)
         if avg_peak_density <= 600:
             return avg_peak_density / 6
@@ -338,34 +348,8 @@ class SimfileParser:
         return (farrowrate + 2484) * 100 / 5984
 
     def _grChaos(self, note, bpms, stops, is_double):
-        note_sum = self._sum1and2(note)
-        fract = self._noteToFract(note)
-
-        basechaos = 0.0
-        for color, dist in fract:
-            if dist <= 0:
-                continue
-            basechaos += note_sum * color / dist
-
-        bpmchanges = self._getBpmChanges(bpms, stops)
-        if not bpmchanges:
-            bpmchanges = [120.0]
-
-        totalbpmchange = 0.0
-        i = 0
-        lastnonzero = bpmchanges[0]
-        while i < len(bpmchanges):
-            if bpmchanges[i] != 0:
-                lastnonzero = bpmchanges[i]
-                if i + 1 < len(bpmchanges):
-                    totalbpmchange += abs(bpmchanges[i] - bpmchanges[i + 1])
-                    i += 1
-            elif i + 1 < len(bpmchanges):
-                totalbpmchange += bpmchanges[i + 1] if bpmchanges[i + 1] > 0 else lastnonzero
-            else:
-                totalbpmchange += lastnonzero
-            i += 1
-
+        basechaos = self._chaosBaseValue(note)
+        totalbpmchange = self._totalBpmDelta(bpms, stops) if bpms else 0.0
         bpmchangepm = 60.0 * totalbpmchange / self._songLenForRadar()
         chaosdegree = basechaos * (1 + (bpmchangepm / 1500))
         chaosunit = int(chaosdegree * 100 / self._songLenForRadar())
