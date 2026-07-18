@@ -63,10 +63,15 @@ class SimfileParser:
     def parseData(self):
         title = self.simfile.title
         title_translit = self.simfile.titletranslit
+        # licensed songs may ship without an #ARTIST tag (property is None)
+        artist = self.simfile.artist or ""
+        artist_translit = self.simfile.artisttranslit
 
         self.song_data = {
             "title": title,
             "titletranslit": title_translit or title,
+            "artist": artist,
+            "artisttranslit": artist_translit or artist,
             "song_length": float(_fmt(self.song_length)),
             "per_chart": self.per_chart,
         }
