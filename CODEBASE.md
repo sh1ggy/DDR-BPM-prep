@@ -19,15 +19,16 @@ dominant tempo, its min/max range, where it speeds up, slows down, or stops — 
 can pick the right speed-modifier in game. Raw simfiles contain this information, but
 buried in a noisy format. This pipeline extracts and summarises it.
 
-The pipeline has **three stages**, each with its own Makefile and scripts:
+The pipeline has **four stages**, each with its own Makefile and scripts:
 
 ```
- 1. SCRAPE                    2. PARSE                        3. DEPLOY
- ─────────                    ────────                        ─────────
- Download .zip song packs     Read every simfile, extract     Stage jacket art (full + 160),
- from Zenius-I-Vanisher       BPM/stops/levels, write JSON    zip everything, push a
- and unzip into ./data/       into ./build/                   GitHub release
- (shell scripts)              (Python)                        (shell + ImageMagick + gh)
+ 1. SCRAPE                 2. PARSE                    3. SYNC                     4. DEPLOY
+ ─────────                 ────────                    ───────                     ─────────
+ Download .zip song packs  Read every simfile,         Extract audio from the      Stage jacket art (full + 160),
+ from Zenius-I-Vanisher    extract BPM/stops/levels,   zips, fingerprint it        zip everything, push a
+ and unzip into ./data/    write JSON into ./build/    against chart timing,       GitHub release
+ (shell scripts)           (Python)                    attach "sync" to song JSON  (shell + ImageMagick + gh)
+                                                       (shell + Python)
 ```
 
 ---
@@ -40,25 +41,31 @@ DDR-BPM-prep/
 ├── Makefiles/
 │   ├── scraper.mk           # Stage 1 targets: full_scrape, scrape_packs, scrape_songs, unzip, dedupe
 │   ├── parser.mk            # Stage 2 targets: parse, songs, courses, check_songs, fix, load, write
-│   └── deploy.mk            # Stage 3 targets: predeploy, predeploy-force
+│   ├── sync.mk              # Stage 3 targets: sync, sync-force, arcade_sync, arcade_sync-force, unzip_audio, clobber_sync, clobber_arcade_sync
+│   └── deploy.mk            # Stage 4 targets: predeploy, predeploy-force
 ├── scripts/
 │   ├── scrape/              # Stage 1 shell scripts (download/unzip/dedupe)
 │   ├── parse/               # fix.sh — one-off surgical fixes to broken simfiles
 │   └── deploy/              # predeploy.sh (build artefacts), release.sh (GitHub release)
-├── src/                     # Stage 2 Python code (the heart of the project)
+├── src/                     # Stage 2+3 Python code (the heart of the project)
 │   ├── env.py               # Paths, directories, logging setup — imported by everything
 │   ├── utils.py             # JSON I/O, song lookup, Japanese/English title sorting
 │   ├── build_tools.py       # Writers: per-song JSON, summary JSON, grouped indexes
 │   ├── parse_simfiles.py    # MAIN SCRIPT: songs → JSON
 │   ├── parse_courses.py     # SECOND SCRIPT: course lists → JSON
 │   ├── check_songs.py       # Sanity checker run before parsing
+│   ├── sync_songs.py        # Stage 3 driver: audio sync analysis → "sync" in song JSON
+│   ├── arcade_sync.py       # Stage 3 driver: arcade data analysis → "arcade_sync" in song JSON
 │   └── classes/
 │       ├── SimfileRes.py    # Locates a song's files on disk (.sm/.ssc, jacket, banner)
 │       ├── SimfileParser.py # Extracts & cleans BPM/stop/level data from one simfile
+│       ├── SyncAnalyzer.py  # Audio-vs-timing sync fingerprint (vendored from nine-or-null, MIT)
+│       ├── ArcadeSyncAnalyzer.py # Same fingerprint, but for arcade .ssq charts + .xwb audio
 │       └── BPMRange.py      # Small BPM-range helper (speed-mod tables) — mostly legacy
 ├── data/                    # "Seed" directory: downloaded packs + hand-maintained lists
 │   ├── <VERSION>.zip        # One zip per DDR arcade release (WORLD, A3, A20 PLUS, … 1st)
 │   ├── <VERSION>/<SONG>/    # Unzipped song folders (simfile + artwork + audio)
+│   ├── arcade/              # Paste an arcade data dump here for `make arcade_sync` (git-ignored)
 │   ├── all_songs.txt        # ★ Master list of every song currently in the game (~1,264)
 │   ├── removed.txt          # Songs that used to exist but were removed from the arcade
 │   ├── title_map.csv        # Title spelling overrides used only for sorting (e.g. "IX" → "9")
@@ -67,7 +74,9 @@ DDR-BPM-prep/
 │   ├── ddr_courses.txt      # Official DDR in-game courses
 │   └── life4_courses.txt    # LIFE4 (community ranking) courses
 ├── build/                   # All generated output (git-ignored)
-│   ├── songs/               # One JSON file per song (full chart detail)
+│   ├── songs/               # One JSON file per song (full chart detail incl. sync)
+│   ├── sync/                # Cached sync-analysis results (expensive; spared by clobber)
+│   ├── arcade_sync/         # Cached arcade sync results, keyed by arcade basename (e.g. tlov.json)
 │   ├── summaries/           # summary.json + grouped indexes (by name/version/level)
 │   ├── courses/             # dan_sp.json, dan_dp.json, ddr.json, life4.json
 │   ├── jackets/             # full-resolution jacket art (predeploy output)
@@ -108,10 +117,13 @@ three stage makefiles. Key targets:
 | `make parse` | Parse | Sanity-check the song list, then generate all song + course JSON |
 | `make load` | Parse | Load the generated JSON into an interactive Python REPL for inspection |
 | `make write` | Parse | Re-generate the summary files from already-built song JSON |
+| `make unzip_audio` | Sync | Extract song audio (`*.ogg` etc.) from the pack zips into `data/` |
+| `make sync` | Sync | `unzip_audio`, then fingerprint audio vs. chart timing and merge `sync` into song JSON (`sync-force` recomputes cached results) |
+| `make arcade_sync` | Sync | Fingerprint arcade `.ssq` timing vs. `.xwb` audio from a dump in `data/arcade/` and merge `arcade_sync` into song JSON (no-op without the dump; `arcade_sync-force` recomputes) |
 | `make predeploy` | Deploy | Stage full-res + 160 jackets, zip artefacts (`FORCE=Y` via `predeploy-force` to redo images) |
 | `make release` | Deploy | Push `build/*.zip` + song lists as the GitHub release tagged `Latest` |
-| `make main` | All | `clobber` → `parse` → `predeploy` (the everything-after-scraping shortcut) |
-| `make clean` / `make clobber` | — | Delete logs / also delete inner zips and built JSON |
+| `make main` | All | `clobber` → `parse` → `arcade_sync` → `predeploy` (the everything-after-scraping shortcut; simfile `sync` is opt-in, run it explicitly if wanted) |
+| `make clean` / `make clobber` | — | Delete logs / also delete inner zips and built JSON (the `build/sync/` cache is spared; use `make clobber_sync`) |
 
 ---
 
@@ -303,7 +315,94 @@ its display title, relevant SP/DP level(s), and BPM range. Output:
 
 ---
 
-## 6. Stage 3 — Deploy (`Makefiles/deploy.mk` + `scripts/deploy/`)
+## 6. Stage 3 — Sync analysis (`Makefiles/sync.mk` + `src/sync_songs.py`)
+
+Measures how the song's audio lines up with the simfile's beat grid and attaches
+the result to the per-song JSON, so the app can graph "song sync". Runs after
+`make parse` (it merges into `build/songs/*.json`). This simfile flavour is
+**opt-in** and not part of `make main`: it measures the fan pack's own sync,
+which is not the app's use case (cabinet feel — see "Arcade sync" below, which
+*is* in `make main`). It is kept working for when it's needed.
+
+- **[unzip_audio.sh](scripts/scrape/unzip_audio.sh)** (`make unzip_audio`) — the
+  pack zips ship each song's audio, but the regular `unzip` target deliberately
+  skips it. This script extracts `*.ogg` / `*.oga` / `*.mp3` / `*.wav` into the
+  same `data/<VERSION>/<SONG>/` folders. `make sync` depends on it.
+
+- **[classes/SyncAnalyzer.py](src/classes/SyncAnalyzer.py)** — the algorithm,
+  vendored from Telperion's [+9ms or Null?](https://github.com/telperion/nine-or-null)
+  (MIT), minus its GUI/plots/offset-rewriting. One instance per simfile: loads
+  the audio once (`pydub` → ffmpeg), then for each beat of the chart timing cuts
+  a ±50 ms spectrogram window, flattens it, and stacks the rows into a "beat
+  digest". A rising-edge convolution over the digest yields a response curve
+  whose peak is the **sync bias**: how many ms the audio attack sits from the
+  charted beat (positive = audio later than the chart, i.e. the chart feels
+  early). A **confidence** metric (0–1) penalizes rivaling response far from the
+  peak. For `per_chart` songs it mirrors `SimfileParser.parseCharts` (one result
+  per unique difficulty, BEMHC order), reusing the analysis when charts share
+  identical timing.
+
+- **[sync_songs.py](src/sync_songs.py)** (`make sync`) — the driver. Iterates
+  `all_songs.txt` (same `loadSongs` as the parser), analyzes each song, and
+  merges a `sync` block into `build/songs/<name>.json` — top-level for shared
+  timing, per `charts[]` entry for `per_chart` songs:
+
+  ```json
+  "sync": {
+      "bias_ms": 1.3,          // peak of the response curve
+      "confidence": 0.752,
+      "curve_start_ms": -49,   // x of curve[0]; x_i = start + i * step
+      "curve_step_ms": 1.0,
+      "curve": [0, 3, "..."]   // response normalized to 0..100 ints
+  }
+  ```
+
+  The curve is resampled onto a fixed 1 ms grid so consumers never see the
+  audio sample rate; the app draws it as a line chart with a vertical marker at
+  `bias_ms`. Analysis costs a few seconds per song (hours for the full
+  catalogue), so raw results are cached in `build/sync/<name>.json`; re-runs
+  only re-merge, which is why `make sync` is cheap to repeat after every
+  `make parse`. `make clobber` spares the cache; `make clobber_sync` wipes it,
+  `make sync-force` (or `FORCE=Y`) recomputes. Passing song names restricts the
+  run: `poetry run python src/sync_songs.py "CHAOS"`. Songs whose audio is
+  missing or ambiguous are logged and skipped (their JSON simply has no `sync`).
+
+### Arcade sync (`make arcade_sync`)
+
+The `sync` block above measures the *fan simfile's* sync — pack authors
+re-sync songs for home play, so it says nothing about how a song feels on a
+real cabinet. This second, optional sub-stage fingerprints the game's own
+assets instead, producing the cabinet feel (validated against
+[FinalOffset](https://finaloffset.telp.gg/) to within ~0.4 ms):
+
+- **Input** — paste an arcade data dump into `data/arcade/` (git-ignored;
+  a symlink works too). Any layout containing `gamedata/musicdb.xml`,
+  `mdb_apx/ssq/` and `sound/win/dance/` is auto-discovered, so dropping the
+  dump's whole `data` folder in there is enough. Without it the stage is a
+  polite no-op, so `make main` works with or without the dump.
+
+- **[classes/ArcadeSyncAnalyzer.py](src/classes/ArcadeSyncAnalyzer.py)** —
+  shares the fingerprint core with `SyncAnalyzer` (both subclass its
+  `Fingerprinter`: audio samples + an iterable of beat timestamps → sync
+  block). Timing comes from the `.ssq` tempo chunk (measure-tick →
+  timekeeper-tick breakpoints, linearly interpolated per beat); audio comes
+  from the `.xwb` XACT wave bank — the longest entry (full song, not the
+  song-wheel preview) is wrapped in an MS-ADPCM WAV header and piped through
+  ffmpeg. No temp files, no resampling, so no constant shift sneaks in.
+
+- **[arcade_sync.py](src/arcade_sync.py)** — the driver. Matches every
+  `build/songs/*.json` to an arcade basename via `musicdb.xml` titles (exact
+  title first, then a normalized fallback that ignores case/symbols when
+  unambiguous), analyzes, and merges a top-level `arcade_sync` block with the
+  same shape as `sync` (arcade timing is song-wide, never per-chart). Cached
+  in `build/arcade_sync/<basename>.json`; same `FORCE=Y` / song-name-args /
+  `clobber_arcade_sync` conventions as the simfile stage. Songs missing from
+  the dump (removed licenses, old-version-only songs) are logged and simply
+  keep only their simfile `sync`.
+
+---
+
+## 7. Stage 4 — Deploy (`Makefiles/deploy.mk` + `scripts/deploy/`)
 
 - **[predeploy.sh](scripts/deploy/predeploy.sh)** — builds the release artefacts:
   1. For every song in `all_songs.txt`, find its `-jacket.png` in `data/`, copy it to
@@ -322,7 +421,7 @@ its display title, relevant SP/DP level(s), and BPM range. Output:
 
 ---
 
-## 7. The seed data files (hand-maintained inputs)
+## 8. The seed data files (hand-maintained inputs)
 
 These files in `data/` are the human-curated half of the pipeline — the code trusts
 them, and `check_songs.py` exists to keep them honest:
@@ -336,7 +435,7 @@ them, and `check_songs.py` exists to keep them honest:
 
 ---
 
-## 8. How a change typically flows (worked example)
+## 9. How a change typically flows (worked example)
 
 Konami releases a new song, or removes some:
 
@@ -347,12 +446,15 @@ Konami releases a new song, or removes some:
    edits, then the song and course JSON are rebuilt into `build/`.
 4. `make load` — optional: poke at the `songs` list in a REPL to spot-check a song
    (`locSong(summary, "paranoia")`).
-5. `make predeploy` — stage any new full-res/160 jackets, rebuild the zips.
-6. `make release` — replace the `Latest` GitHub release; the DDR-BPM app picks it up.
+5. `make sync` — extract audio for any new songs and merge sync-bias data back
+   into the freshly parsed song JSON (cached songs are instant; only new songs
+   get analyzed).
+6. `make predeploy` — stage any new full-res/160 jackets, rebuild the zips.
+7. `make release` — replace the `Latest` GitHub release; the DDR-BPM app picks it up.
 
 ---
 
-## 9. Odds and ends
+## 10. Odds and ends
 
 - **Logging** — everything logs to `log/log.txt` (fresh each run, INFO level);
   removal suspects go to `log/removed.txt`. When something fails, look there first —

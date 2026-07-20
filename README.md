@@ -108,6 +108,39 @@ Parser output includes a `radar` payload on each chart entry in the song JSON:
 using formulas adapted from
 https://github.com/sugoku/groove-radar-calculator (MIT).
 
+### Attach sync-bias data
+```shell
+make sync
+```
+
+Runs after `make parse`. First extracts song audio from the scraped pack zips
+(`make unzip_audio`; audio is skipped by the regular `unzip` target), then
+fingerprints each song's audio against its chart timing and writes a `sync`
+payload into `build/songs/<name>.json` (for `per_chart` songs, one payload per
+`charts[]` entry instead):
+
+```json
+{
+    "sync": {
+        "bias_ms": 1.3,
+        "confidence": 0.752,
+        "curve_start_ms": -49,
+        "curve_step_ms": 1.0,
+        "curve": [0, 3, 11]
+    }
+}
+```
+
+`curve` is the beat-attack convolution response (normalized 0-100) against
+milliseconds-from-beat; its peak sits at `bias_ms`. Positive bias means the
+audio attack lands after the charted beat time. The algorithm is vendored from
+https://github.com/telperion/nine-or-null (MIT).
+
+The first full run takes a couple of hours; results are cached in `build/sync/`
+(spared by `make clobber`, wiped with `make clobber_sync`) so re-runs only
+re-merge. `make sync-force` recomputes, and song names can be passed directly
+to re-analyze a subset: `poetry run python src/sync_songs.py "CHAOS"`.
+
 ### Load data to inspect
 ```shell
 make load

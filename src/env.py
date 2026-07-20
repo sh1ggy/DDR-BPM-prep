@@ -9,6 +9,8 @@ build_jackets_dir = build_dir / "jackets"
 build_simfiles_dir = build_dir / "simfiles"
 build_songs_dir = build_dir / "songs"
 build_summaries_dir = build_dir / "summaries"
+build_sync_dir = build_dir / "sync"
+build_arcade_sync_dir = build_dir / "arcade_sync"
 for folder in [
     build_dir,
     build_courses_dir,
@@ -16,11 +18,14 @@ for folder in [
     build_songs_dir,
     build_simfiles_dir,
     build_summaries_dir,
+    build_sync_dir,
+    build_arcade_sync_dir,
 ]:
     if not folder.exists():
         folder.mkdir()
 
 seed_dir = Path(getenv("SEED_DIR") or "./data")
+arcade_dir = seed_dir / "arcade"
 allsongs_file = str(seed_dir / "all_songs.txt")
 removed_file = str(seed_dir / "removed.txt")
 title_map_file = str(seed_dir / "title_map.csv")
