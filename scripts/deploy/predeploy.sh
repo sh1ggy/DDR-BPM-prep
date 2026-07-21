@@ -89,6 +89,7 @@ rm -f "$jacket_index"
 
 # Zip
 7z a -tzip $BUILD_DIR/songs.zip -w $BUILD_DIR/songs/.
+7z a -tzip $BUILD_DIR/steps.zip -w $BUILD_DIR/steps/.
 7z a -tzip $BUILD_DIR/jackets.zip -w $jackets_160_dir/.
 7z a -tzip $BUILD_DIR/jackets-full.zip -w $jackets_full_dir/.
 7z a -tzip $BUILD_DIR/simfiles.zip -w $simfiles_dir/.

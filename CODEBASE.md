@@ -75,6 +75,7 @@ DDR-BPM-prep/
 │   └── life4_courses.txt    # LIFE4 (community ranking) courses
 ├── build/                   # All generated output (git-ignored)
 │   ├── songs/               # One JSON file per song (full chart detail incl. sync)
+│   ├── steps/               # One note-stream JSON per song (per-difficulty notes for the chart renderer / dancing bot; large, shipped & loaded separately)
 │   ├── sync/                # Cached sync-analysis results (expensive; spared by clobber)
 │   ├── arcade_sync/         # Cached arcade sync results, keyed by arcade basename (e.g. tlov.json)
 │   ├── summaries/           # summary.json + grouped indexes (by name/version/level)
@@ -244,6 +245,17 @@ wall-clock seconds). Produces four things:
 - **`chart_data`** — a list of BPM/stop descriptions. For ordinary songs all charts
   share timing, so only one entry exists; for `per_chart` songs, one entry per
   distinct difficulty (asserted to appear in Beginner→Challenge order, `"BEMHC"`).
+- **`steps_data`** — the per-difficulty note stream, keyed `{sp: {<difficulty>:
+  {notes: [...]}}, dp: {...}}`. Unlike `chart_data`, notes differ for every
+  difficulty, so this walks *every* chart. Each note is compact
+  `{"b": beat, "s": second, "c": col, "t": type}` (type `0`=tap `1`=hold `2`=roll
+  `3`=mine); holds/rolls also carry `"e"`/`"es"` (tail beat + second). Written to
+  its **own** `build/steps/<name>.json` by `build_tools.writeStepsToDist` — never
+  folded into the per-song JSON or the merged songlist, because the app loads it
+  lazily only when a chart view is opened. Feeds the app's scrolling chart
+  renderer (and, later, a parity-solved dancing bot — the `feet` field is added
+  downstream). Built from the `simfile` library's `time_notes`, which already
+  yields wall-clock seconds; hold heads are paired with their tails per column.
 
 The interesting logic is the cleanup, governed by the tunable constants at the top of
 the file:

@@ -24,6 +24,12 @@ arcade_sync:
 arcade_sync-force: export FORCE=Y
 arcade_sync-force: arcade_sync
 
+# Extract chart-preview noteskin sprites from the arcade dump in data/arcade/
+# (no-op without a dump). Copyrighted output lands in build/noteskin/ and is
+# copied into the app's git-ignored assets/noteskin/ by hand.
+noteskin:
+	poetry run python $(SRC_DIR)/extract_noteskin.py
+
 clobber_sync:
 	rm -fv build/sync/*.json || [ $$? -eq 1 ]
 

@@ -55,6 +55,11 @@ def addChartData(songs: list) -> None:
         song["radar"] = parser.radar_data
         song["charts"] = parser.chart_data
 
+        # Note streams live in their own build/steps/ file, not on the song
+        # dict, so they never bloat the per-song JSON or the merged songlist.
+        if "-n" not in sys.argv:
+            build.writeStepsToDist(song["name"], parser.steps_data)
+
 
 def main():
     songs = []

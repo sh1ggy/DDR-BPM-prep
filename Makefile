@@ -26,4 +26,4 @@ clean:
 # only depends on data/ (wipe it explicitly with `make clobber_sync`)
 clobber: clean
 	rm -fv data/**/*.zip || [ $$? -eq 1 ]
-	rm -fv build/{courses,songs,summaries}/*.json(N) || [ $$? -eq 1 ]
+	rm -fv build/{courses,songs,steps,summaries}/*.json(N) || [ $$? -eq 1 ]

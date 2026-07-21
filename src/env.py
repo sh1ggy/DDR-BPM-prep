@@ -8,6 +8,7 @@ build_courses_dir = build_dir / "courses"
 build_jackets_dir = build_dir / "jackets"
 build_simfiles_dir = build_dir / "simfiles"
 build_songs_dir = build_dir / "songs"
+build_steps_dir = build_dir / "steps"
 build_summaries_dir = build_dir / "summaries"
 build_sync_dir = build_dir / "sync"
 build_arcade_sync_dir = build_dir / "arcade_sync"
@@ -16,6 +17,7 @@ for folder in [
     build_courses_dir,
     build_jackets_dir,
     build_songs_dir,
+    build_steps_dir,
     build_simfiles_dir,
     build_summaries_dir,
     build_sync_dir,

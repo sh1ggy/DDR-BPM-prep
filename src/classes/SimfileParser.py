@@ -5,10 +5,18 @@ import simfile
 # from simfile import notes
 
 # from simfile.notes.timed import time_notes
-from simfile.notes import NoteData
+from simfile.notes import NoteData, NoteType
 from simfile.notes.count import count_steps
+from simfile.notes.timed import time_notes
 from simfile.timing import Beat, TimingData
 from simfile.timing.engine import TimingEngine
+
+# Note-type codes emitted into steps JSON (kept tiny; a jump is just two taps on
+# the same row). Holds/rolls also carry an end beat+second; taps/mines do not.
+_STEP_TAP = 0
+_STEP_HOLD = 1
+_STEP_ROLL = 2
+_STEP_MINE = 3
 
 
 BPM_BUMP_TRIGGER_DIFF = 10
@@ -79,6 +87,7 @@ class SimfileParser:
         self.notecounts_data = self.parseNotecounts()
         self.radar_data = self.parseRadars()
         self.chart_data = self.parseCharts()
+        self.steps_data = self.parseSteps()
 
     def isPerChart(self):
         # per_chart if any chart has its own BPM/stops data
@@ -149,6 +158,70 @@ class SimfileParser:
         ]
 
         return [data]
+
+    def parseSteps(self):
+        """
+        Per-difficulty note stream for the chart renderer / dancing bot.
+
+        Unlike BPM/stop data (which charts share, hence `chart_data` collapses
+        to one entry for non-per_chart songs), the *notes* differ for every
+        difficulty, so this walks every chart and keys the output by
+        style ("sp"/"dp") -> difficulty. Each note carries its beat, wall-clock
+        second, column, and a type code; holds/rolls also carry the beat+second
+        of their tail so the renderer can draw the sustain bar.
+        """
+        sp = {}
+        dp = {}
+        for chart in self.charts:
+            notes = self._parseChartNotes(chart)
+            entry = {"notes": notes}
+            if chart.stepstype == "dance-double":
+                dp[chart.difficulty.lower()] = entry
+            elif chart.stepstype == "dance-single":
+                sp[chart.difficulty.lower()] = entry
+        return {"sp": sp, "dp": dp}
+
+    def _parseChartNotes(self, chart):
+        timing_data = TimingData(self.simfile, chart)
+        note_data = NoteData(chart)
+
+        # time_notes yields heads, tails and mines in beat order. Pair each
+        # hold/roll head with the next tail in the same column to emit one
+        # sustained note; tails themselves are not emitted standalone.
+        open_holds = {}  # column -> the head note dict awaiting its tail
+        notes = []
+        for timed in time_notes(note_data, timing_data):
+            note = timed.note
+            col = note.column
+            beat = float(note.beat)
+            second = float(_fmt(timed.time))
+            ntype = note.note_type
+
+            if ntype == NoteType.TAIL:
+                head = open_holds.pop(col, None)
+                if head is not None:
+                    head["e"] = beat
+                    head["es"] = second
+                continue
+
+            if ntype == NoteType.MINE:
+                notes.append({"b": beat, "s": second, "c": col, "t": _STEP_MINE})
+                continue
+
+            if ntype == NoteType.TAP or ntype == NoteType.LIFT:
+                notes.append({"b": beat, "s": second, "c": col, "t": _STEP_TAP})
+                continue
+
+            if ntype == NoteType.HOLD_HEAD or ntype == NoteType.ROLL_HEAD:
+                code = _STEP_HOLD if ntype == NoteType.HOLD_HEAD else _STEP_ROLL
+                head = {"b": beat, "s": second, "c": col, "t": code}
+                open_holds[col] = head
+                notes.append(head)
+                continue
+
+            # FAKE/ATTACK/KEYSOUND aren't played arrows: skip silently.
+
+        return notes
 
     def parseRadars(self):
         # radar is a per-chart quantity: group by style/difficulty like levels
