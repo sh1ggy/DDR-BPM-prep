@@ -1,4 +1,17 @@
 # Quickstart
+
+## Chart patterns and step analysis
+
+SM/SSC pattern counts, density, quantization and labelled SP footwork estimates
+are included in the metadata build. For standalone analysis and the versioned
+counting rules, see [Chart pattern analysis](docs/pattern-analysis.md).
+For a short visual reference, see [Pattern reference](docs/pattern-reference.md).
+
+```sh
+poetry run python src/analyze_patterns.py path/to/chart.ssc --events --output build/analysis/chart.json
+poetry run python -m unittest discover -s tests -v
+```
+
 ## Install
 Runs on Python 3.11.4 on MacOS M1.
 

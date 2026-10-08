@@ -278,6 +278,17 @@ the file:
   "nicely" on a multiple of ¼ or ⅓ beat (within 0.05); if neither is nice, both
   candidates are emitted.
 
+### 5.4.1 Chart pattern metadata
+
+`SimfileParser.pattern_data` calls `classes/PatternAnalyzer.py` for every source
+chart and is written as `pattern_analysis` on each song. Chart indices preserve
+duplicate difficulty names. Counts, timing density, quantization and structural
+patterns support SP/DP; two explicit SP footwork profiles report estimates and
+coverage. `src/analyze_patterns.py` runs independently on SM/SSC files and can
+include beat/time occurrences or compare counts with an external Averages CSV.
+See [the versioned counting contract](docs/pattern-analysis.md) for definitions,
+reference mappings and limitations. Tests: `poetry run python -m unittest discover -s tests -v`.
+
 ### 5.5 File discovery: [classes/SimfileRes.py](src/classes/SimfileRes.py)
 
 A tiny helper representing a song folder's resources. Given `data/<ver>/<song>/`, it

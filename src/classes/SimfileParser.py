@@ -10,6 +10,7 @@ from simfile.notes.count import count_steps
 from simfile.notes.timed import time_notes
 from simfile.timing import Beat, TimingData
 from simfile.timing.engine import TimingEngine
+from classes.PatternAnalyzer import analyze_simfile
 
 # Note-type codes emitted into steps JSON (kept tiny; a jump is just two taps on
 # the same row). Holds/rolls also carry an end beat+second; taps/mines do not.
@@ -88,6 +89,7 @@ class SimfileParser:
         self.radar_data = self.parseRadars()
         self.chart_data = self.parseCharts()
         self.steps_data = self.parseSteps()
+        self.pattern_data = analyze_simfile(self.simfile)
 
     def isPerChart(self):
         # per_chart if any chart has its own BPM/stops data
