@@ -24,6 +24,12 @@ arcade_sync:
 arcade_sync-force: export FORCE=Y
 arcade_sync-force: arcade_sync
 
+# Attach the cabinet's time signatures ("time_signatures") to build/songs/*.json
+# for songs that aren't plain 4/4 — simfiles don't carry them. Same dump in
+# data/arcade/ (no-op without it); reads charts only, so no cache.
+arcade_timesigs:
+	poetry run python $(SRC_DIR)/arcade_timesigs.py
+
 # Extract chart-preview noteskin sprites from the arcade dump in data/arcade/
 # (no-op without a dump). Copyrighted output lands in build/noteskin/ and is
 # copied into the app's git-ignored assets/noteskin/ by hand.
