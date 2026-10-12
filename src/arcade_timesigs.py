@@ -8,8 +8,8 @@ every song parses as 4/4 from beat 0. The cabinet charts do: a list of
 songs that moves the measure lines, and on a dozen it shifts the beat lines
 off the notes' beats too.
 
-Reads each matched song's .ssq from the arcade dump in data/arcade/ (same
-discovery and title matching as arcade_sync.py) and merges a top-level
+Reads each matched song's locally supplied chart data (same
+discovery and title matching as the sync stage) and merges a top-level
 "time_signatures" list into its song JSON, only when it isn't plain 4/4 from
 beat 0:
 
@@ -28,10 +28,7 @@ from arcade_sync import findRip, findSsq, loadArcadeIndex, matchBasename
 import struct
 import sys
 
-# .ssq chunk stream: u32 length (incl. header), u16 type, u16 param, u32 count.
-# Type 2 holds chart events: i32 position[count] (1024 per beat) then
-# u16 event[count]; low byte 1 is a time signature with beats per bar in the
-# high byte.
+# Chart event decoding; supporting notes kept locally.
 EVENTS_CHUNK = 2
 TIME_SIGNATURE = 1
 TICKS_PER_BEAT = 1024

@@ -122,7 +122,7 @@ three stage makefiles. Key targets:
 | `make unzip_audio` | Sync | Extract song audio (`*.ogg` etc.) from the pack zips into `data/` |
 | `make sync` | Sync | `unzip_audio`, then fingerprint audio vs. chart timing and merge `sync` into song JSON (`sync-force` recomputes cached results) |
 | `make arcade_sync` | Sync | Fingerprint arcade `.ssq` timing vs. `.xwb` audio from a dump in `data/arcade/` and merge `arcade_sync` into song JSON (no-op without the dump; `arcade_sync-force` recomputes) |
-| `make arcade_timesigs` | Sync | Read each song's time signatures from the same dump's `.ssq` charts and merge `time_signatures` into song JSON for songs that aren't plain 4/4 (no-op without the dump; cheap, no cache) |
+| `make arcade_timesigs` | Sync | Read each song's time signatures from locally supplied chart data and merge `time_signatures` into song JSON for songs that aren't plain 4/4 (no-op without the dump; cheap, no cache) |
 | `make predeploy` | Deploy | Stage full-res + 160 jackets, zip artefacts (`FORCE=Y` via `predeploy-force` to redo images) |
 | `make release` | Deploy | Push `build/*.zip` + song lists as the GitHub release tagged `Latest` |
 | `make main` | All | `clobber` → `parse` → `arcade_sync` → `arcade_timesigs` → `predeploy` (the everything-after-scraping shortcut; simfile `sync` is opt-in, run it explicitly if wanted) |
@@ -427,35 +427,12 @@ assets instead, producing the cabinet feel (validated against
 
 ### Arcade time signatures (`make arcade_timesigs`)
 
-Fan simfiles almost never carry time signatures (`.sm` can't store them, and
-none of the DDR songs' `.ssc` files sets any), so every song parses as 4/4 from
-beat 0. The cabinet charts do carry them, and the app's guideline and measure
-rules need them: on ~60 songs the bar lines move (e.g. CENTAUR's 7/4 section,
-StrayedCatz's 3/4 and 2/4 bars), and on about a dozen a signature starts off
-the beat, so even the beat lines shift. Like `arcade_sync`, this is a
-deliberate exception to "everything comes from the simfiles", for data the
-simfiles don't have.
-
-- **Input** — the same dump in `data/arcade/` (found the same way).
-- **[arcade_timesigs.py](src/arcade_timesigs.py)** — reuses `arcade_sync.py`'s
-  dump discovery, title matching and `findSsq`, then reads the `.ssq` events
-  chunk (type 2): `i32 position[count]` (1024 per beat) then
-  `u16 event[count]`; an event whose low byte is 1 is a time signature with
-  beats per bar in the high byte, always over a quarter note.
-- **Output** — a top-level `time_signatures` list in the song JSON, only for
-  songs that aren't plain 4/4 from beat 0 (and removed again if a song becomes
-  plain):
-
-  ```json
-  "time_signatures": [{"beat": 0.0, "beats": 4}, {"beat": 36.0, "beats": 7}, {"beat": 43.5, "beats": 4}]
-  ```
-
-  Beats are the chart's own: cabinet and simfile beat 0 coincide. An entry
-  governs until the next; the first also governs any beats before it. Bar
-  lines step from each entry's own beat, so an entry need not sit on a beat
-  or a bar.
-- Reads charts only, so there's no cache; a full run takes a few seconds. Pass
-  song names to restrict it. Unmatched songs simply stay 4/4.
+Run after parsing to merge optional `time_signatures` into song JSON using
+locally supplied chart data. The stage is a no-op when that data is absent.
+Plain 4/4 songs omit the field. Each entry has `beat` and `beats` (quarter
+notes per bar), governs until the next entry, and anchors its own bar and
+beat lines. The first entry also governs earlier beats. Supporting notes
+are kept locally. Pass song names to restrict the run; there is no cache.
 
 ---
 
