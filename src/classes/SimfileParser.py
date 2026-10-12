@@ -66,6 +66,9 @@ class SimfileParser:
 
         self.measures = sum(c == "," for c in self.charts[0].notes)
         self.song_length = self.getSongLength()
+        # the radar formulas were tuned against this older length (start of
+        # the first chart's last measure), so they keep it
+        self.radar_length = self.getRadarLength()
 
         self.parseData()
 
@@ -87,8 +90,15 @@ class SimfileParser:
         self.levels_data = self.parseLevels()
         self.notecounts_data = self.parseNotecounts()
         self.radar_data = self.parseRadars()
-        self.chart_data = self.parseCharts()
         self.steps_data = self.parseSteps()
+        # BPM segments stop at the last note so time after it can't sway
+        # dominant_bpm or bpm_range
+        self.notes_end = max(
+            (n.get("es", n["s"]) for d in self.steps_data.values()
+             for c in d.values() for n in c["notes"]),
+            default=self.song_length,
+        )
+        self.chart_data = self.parseCharts()
         self.pattern_data = analyze_simfile(self.simfile)
 
     def isPerChart(self):
@@ -99,12 +109,20 @@ class SimfileParser:
                 return True
         return False
 
+    # end of the last measure of the longest chart
     def getSongLength(self):
+        ends = []
+        for chart in self.charts:
+            measures = sum(1 for m in chart.notes.split(",") if m.strip())
+            timing_eng = TimingEngine(TimingData(self.simfile, chart))
+            ends.append(timing_eng.time_at(Beat(4 * measures)))
+        return max(ends)
+
+    def getRadarLength(self):
         chart = self.charts[0]
         timing_data = TimingData(self.simfile, chart)
         timing_eng = TimingEngine(timing_data)
-        song_length = timing_eng.time_at(Beat(4 * self.measures))
-        return song_length
+        return timing_eng.time_at(Beat(4 * self.measures))
 
     def parseLevels(self):
         sp_levels = {}
@@ -147,9 +165,13 @@ class SimfileParser:
         timing_data = TimingData(self.simfile, chart)
         timing_eng = TimingEngine(timing_data)
 
-        bpm_timestamps = [timing_eng.time_at(bpm.beat) for bpm in timing_data.bpms]
-        bpm_timestamps.append(self.song_length)
-        bpm_vals = [bpm.value for bpm in timing_data.bpms]
+        bpms = [timing_data.bpms[0]] + [
+            bpm for bpm in timing_data.bpms[1:]
+            if float(_fmt(timing_eng.time_at(bpm.beat))) <= self.notes_end
+        ]
+        bpm_timestamps = [timing_eng.time_at(bpm.beat) for bpm in bpms]
+        bpm_timestamps.append(self.notes_end)
+        bpm_vals = [bpm.value for bpm in bpms]
         bpm_vals.append(bpm_vals[-1])
 
         # displaybpm = self.simfile.displaybpm # some songs dont have displaybpm field. e.g. illegal function call
@@ -272,7 +294,7 @@ class SimfileParser:
         }
 
     def _songLenForRadar(self):
-        return max(float(self.song_length), 0.001)
+        return max(float(self.radar_length), 0.001)
 
     def _radarNoteData(self, chart):
         measures = []
