@@ -51,7 +51,16 @@ def addChartData(songs: list) -> None:
         # save dict
         song.update(parser.song_data)
         song.update(parser.levels_data)
+        song["notecounts"] = parser.notecounts_data
+        song["radar"] = parser.radar_data
         song["charts"] = parser.chart_data
+        # A list preserves edit charts and duplicate style/difficulty pairs.
+        song["pattern_analysis"] = parser.pattern_data
+
+        # Note streams live in their own build/steps/ file, not on the song
+        # dict, so they never bloat the per-song JSON or the merged songlist.
+        if "-n" not in sys.argv:
+            build.writeStepsToDist(song["name"], parser.steps_data)
 
 
 def main():

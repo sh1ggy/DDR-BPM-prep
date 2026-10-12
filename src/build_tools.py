@@ -18,6 +18,17 @@ def writeSongsToDist(songs):
         utils.writeJson(song, str(env.build_songs_dir / fname))
 
 
+def writeStepsToDist(name: str, steps: Any) -> None:
+    """
+    One note-stream file per song, written to its own build/steps/ tree (never
+    folded into the per-song JSON or the merged songlist — steps are large and
+    per-difficulty, and the app loads them lazily only when a chart is opened).
+    """
+    fname = name + ".json"
+    env.logger.debug(f"Writing steps {fname}")
+    utils.writeJson({"name": name, "charts": steps}, str(env.build_steps_dir / fname))
+
+
 def writeSummaryToDist(songs: Any):
     """
     Write basic info of all songs into a single file.

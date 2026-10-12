@@ -4,10 +4,20 @@ import simfile
 # from simfile import timing
 # from simfile import notes
 
-# from simfile.notes import NoteData, count
 # from simfile.notes.timed import time_notes
+from simfile.notes import NoteData, NoteType
+from simfile.notes.count import count_steps
+from simfile.notes.timed import time_notes
 from simfile.timing import Beat, TimingData
 from simfile.timing.engine import TimingEngine
+from classes.PatternAnalyzer import analyze_simfile
+
+# Note-type codes emitted into steps JSON (kept tiny; a jump is just two taps on
+# the same row). Holds/rolls also carry an end beat+second; taps/mines do not.
+_STEP_TAP = 0
+_STEP_HOLD = 1
+_STEP_ROLL = 2
+_STEP_MINE = 3
 
 
 BPM_BUMP_TRIGGER_DIFF = 10
@@ -56,21 +66,40 @@ class SimfileParser:
 
         self.measures = sum(c == "," for c in self.charts[0].notes)
         self.song_length = self.getSongLength()
+        # the radar formulas were tuned against this older length (start of
+        # the first chart's last measure), so they keep it
+        self.radar_length = self.getRadarLength()
 
         self.parseData()
 
     def parseData(self):
         title = self.simfile.title
         title_translit = self.simfile.titletranslit
+        # licensed songs may ship without an #ARTIST tag (property is None)
+        artist = self.simfile.artist or ""
+        artist_translit = self.simfile.artisttranslit
 
         self.song_data = {
             "title": title,
             "titletranslit": title_translit or title,
+            "artist": artist,
+            "artisttranslit": artist_translit or artist,
             "song_length": float(_fmt(self.song_length)),
             "per_chart": self.per_chart,
         }
         self.levels_data = self.parseLevels()
+        self.notecounts_data = self.parseNotecounts()
+        self.radar_data = self.parseRadars()
+        self.steps_data = self.parseSteps()
+        # BPM segments stop at the last note so time after it can't sway
+        # dominant_bpm or bpm_range
+        self.notes_end = max(
+            (n.get("es", n["s"]) for d in self.steps_data.values()
+             for c in d.values() for n in c["notes"]),
+            default=self.song_length,
+        )
         self.chart_data = self.parseCharts()
+        self.pattern_data = analyze_simfile(self.simfile)
 
     def isPerChart(self):
         # per_chart if any chart has its own BPM/stops data
@@ -80,12 +109,20 @@ class SimfileParser:
                 return True
         return False
 
+    # end of the last measure of the longest chart
     def getSongLength(self):
+        ends = []
+        for chart in self.charts:
+            measures = sum(1 for m in chart.notes.split(",") if m.strip())
+            timing_eng = TimingEngine(TimingData(self.simfile, chart))
+            ends.append(timing_eng.time_at(Beat(4 * measures)))
+        return max(ends)
+
+    def getRadarLength(self):
         chart = self.charts[0]
         timing_data = TimingData(self.simfile, chart)
         timing_eng = TimingEngine(timing_data)
-        song_length = timing_eng.time_at(Beat(4 * self.measures))
-        return song_length
+        return timing_eng.time_at(Beat(4 * self.measures))
 
     def parseLevels(self):
         sp_levels = {}
@@ -96,6 +133,18 @@ class SimfileParser:
             elif chart.stepstype == "dance-single":
                 sp_levels[chart.difficulty.lower()] = int(chart.meter)
         return {"sp": sp_levels, "dp": dp_levels}
+
+    def parseNotecounts(self):
+        # steps as counted in-game: a jump counts as one step
+        sp_counts = {}
+        dp_counts = {}
+        for chart in self.charts:
+            notecount = count_steps(NoteData(chart))
+            if chart.stepstype == "dance-double":
+                dp_counts[chart.difficulty.lower()] = notecount
+            elif chart.stepstype == "dance-single":
+                sp_counts[chart.difficulty.lower()] = notecount
+        return {"sp": sp_counts, "dp": dp_counts}
 
     def parseCharts(self):
         data = []
@@ -116,9 +165,13 @@ class SimfileParser:
         timing_data = TimingData(self.simfile, chart)
         timing_eng = TimingEngine(timing_data)
 
-        bpm_timestamps = [timing_eng.time_at(bpm.beat) for bpm in timing_data.bpms]
-        bpm_timestamps.append(self.song_length)
-        bpm_vals = [bpm.value for bpm in timing_data.bpms]
+        bpms = [timing_data.bpms[0]] + [
+            bpm for bpm in timing_data.bpms[1:]
+            if float(_fmt(timing_eng.time_at(bpm.beat))) <= self.notes_end
+        ]
+        bpm_timestamps = [timing_eng.time_at(bpm.beat) for bpm in bpms]
+        bpm_timestamps.append(self.notes_end)
+        bpm_vals = [bpm.value for bpm in bpms]
         bpm_vals.append(bpm_vals[-1])
 
         # displaybpm = self.simfile.displaybpm # some songs dont have displaybpm field. e.g. illegal function call
@@ -129,6 +182,284 @@ class SimfileParser:
         ]
 
         return [data]
+
+    def parseSteps(self):
+        """
+        Per-difficulty note stream for the chart renderer / dancing bot.
+
+        Unlike BPM/stop data (which charts share, hence `chart_data` collapses
+        to one entry for non-per_chart songs), the *notes* differ for every
+        difficulty, so this walks every chart and keys the output by
+        style ("sp"/"dp") -> difficulty. Each note carries its beat, wall-clock
+        second, column, and a type code; holds/rolls also carry the beat+second
+        of their tail so the renderer can draw the sustain bar.
+        """
+        sp = {}
+        dp = {}
+        for chart in self.charts:
+            notes = self._parseChartNotes(chart)
+            entry = {"notes": notes}
+            if chart.stepstype == "dance-double":
+                dp[chart.difficulty.lower()] = entry
+            elif chart.stepstype == "dance-single":
+                sp[chart.difficulty.lower()] = entry
+        return {"sp": sp, "dp": dp}
+
+    def _parseChartNotes(self, chart):
+        timing_data = TimingData(self.simfile, chart)
+        note_data = NoteData(chart)
+
+        # time_notes yields heads, tails and mines in beat order. Pair each
+        # hold/roll head with the next tail in the same column to emit one
+        # sustained note; tails themselves are not emitted standalone.
+        open_holds = {}  # column -> the head note dict awaiting its tail
+        notes = []
+        for timed in time_notes(note_data, timing_data):
+            note = timed.note
+            col = note.column
+            beat = float(note.beat)
+            second = float(_fmt(timed.time))
+            ntype = note.note_type
+
+            if ntype == NoteType.TAIL:
+                head = open_holds.pop(col, None)
+                if head is not None:
+                    head["e"] = beat
+                    head["es"] = second
+                continue
+
+            if ntype == NoteType.MINE:
+                notes.append({"b": beat, "s": second, "c": col, "t": _STEP_MINE})
+                continue
+
+            if ntype == NoteType.TAP or ntype == NoteType.LIFT:
+                notes.append({"b": beat, "s": second, "c": col, "t": _STEP_TAP})
+                continue
+
+            if ntype == NoteType.HOLD_HEAD or ntype == NoteType.ROLL_HEAD:
+                code = _STEP_HOLD if ntype == NoteType.HOLD_HEAD else _STEP_ROLL
+                head = {"b": beat, "s": second, "c": col, "t": code}
+                open_holds[col] = head
+                notes.append(head)
+                continue
+
+            # FAKE/ATTACK/KEYSOUND aren't played arrows: skip silently.
+
+        return notes
+
+    def parseRadars(self):
+        # radar is a per-chart quantity: group by style/difficulty like levels
+        sp = {}
+        dp = {}
+        for chart in self.charts:
+            radar = self.parseRadar(chart, TimingData(self.simfile, chart))
+            if chart.stepstype == "dance-double":
+                dp[chart.difficulty.lower()] = radar
+            elif chart.stepstype == "dance-single":
+                sp[chart.difficulty.lower()] = radar
+        return {"sp": sp, "dp": dp}
+
+    # Groove radar formulas per https://remywiki.com/GROOVE_RADAR
+    def parseRadar(self, chart, timing_data):
+        note = self._radarNoteData(chart)
+        is_double = chart.stepstype == "dance-double"
+        if not note:
+            return {
+                "stream": 0.0,
+                "voltage": 0.0,
+                "air": 0.0,
+                "freeze": 0.0,
+                "chaos": 0.0,
+            }
+
+        bpms = [[float(bpm.beat), float(bpm.value)] for bpm in timing_data.bpms]
+        stops = [[float(stop.beat), float(stop.value)] for stop in timing_data.stops]
+
+        stream = self._grStream(note, is_double)
+        voltage = self._grVoltage(note)
+        air = self._grAir(note, is_double)
+        freeze = self._grFreeze(note, is_double)
+        chaos = self._grChaos(note, bpms, stops, is_double)
+
+        # no upper clamp: official radar values exceed 100 (up to ~312)
+        def _pos(v):
+            return float(_fmt(max(0.0, v)))
+
+        return {
+            "stream": _pos(stream),
+            "voltage": _pos(voltage),
+            "air": _pos(air),
+            "freeze": _pos(freeze),
+            "chaos": _pos(chaos),
+        }
+
+    def _songLenForRadar(self):
+        return max(float(self.radar_length), 0.001)
+
+    def _radarNoteData(self, chart):
+        measures = []
+        for measure in chart.notes.split(","):
+            rows = []
+            for raw in measure.splitlines():
+                row = raw.split("//", 1)[0].strip()
+                if row:
+                    rows.append(row)
+            if rows:
+                measures.append(rows)
+        return measures
+
+    def _sum1and2(self, arr):
+        # steps + shock arrows ("M" rows), a jump counting as one step
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v", "M"]
+        summed = 0
+        for beat in arr:
+            for note in beat:
+                summed += int(sum(note.count(x) for x in valid) >= 1)
+        return summed
+
+    def _sumJumps(self, arr):
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v"]
+        summed = 0
+        for beat in arr:
+            for note in beat:
+                if sum(note.count(x) for x in valid) >= 2:
+                    summed += 1
+        return summed
+
+    def _sumMines(self, arr):
+        summed = 0
+        for beat in arr:
+            for note in beat:
+                summed += int(note.count("M") >= 1)
+        return summed
+
+    def _sumFreezeTime(self, arr):
+        if not arr or not arr[0]:
+            return 0.0
+        gm_num = len(arr[0][0])
+        last = [-1.0 for _ in range(gm_num)]
+        holds = []
+        for beat in range(len(arr)):
+            for note in range(len(arr[beat])):
+                curr = beat + (note / len(arr[beat]))
+                for lane in range(gm_num):
+                    lane_note = arr[beat][note][lane]
+                    if lane_note == "2" or lane_note == "4":
+                        last[lane] = curr
+                    elif lane_note == "3" and last[lane] != -1:
+                        holds.append((last[lane], curr - last[lane]))
+                        last[lane] = -1
+        # freezes starting simultaneously: only the longer one counts
+        by_start = {}
+        for start, dur in holds:
+            by_start[start] = max(by_start.get(start, 0.0), dur)
+        return sum(by_start.values())
+
+    def _chaosBaseValue(self, arr):
+        # per-note base value: note color x arrows / interval from last note;
+        # (quantization / interval-in-quantization-units) reduces to 1 / the
+        # interval in measures. First note contributes 0.
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v"]
+        base = 0.0
+        last = None
+        for beat in range(len(arr)):
+            for note in range(len(arr[beat])):
+                row = arr[beat][note]
+                arrows = sum(row.count(x) for x in valid) + row.count("M")
+                if arrows == 0:
+                    continue
+                fraction = note / len(arr[beat])
+                if fraction % 0.25 == 0:
+                    color = 0.0
+                elif fraction % 0.125 == 0:
+                    color = 0.5
+                elif fraction % 0.0625 == 0:
+                    color = 1.0
+                else:
+                    color = 1.25
+                current = beat + fraction
+                if last is not None:
+                    dist = current - last
+                    if dist > 0:
+                        base += color * arrows / dist
+                last = current
+        return base
+
+    def _totalBpmDelta(self, bpms, stops):
+        # sum of |BPM changes|; each stop contributes the BPM in effect after
+        # it (a change landing exactly on a stop is covered by the stop rule)
+        stop_beats = {float(s[0]) for s in stops}
+        delta = 0.0
+        for (_, val), (beat2, val2) in zip(bpms[:-1], bpms[1:]):
+            if beat2 not in stop_beats:
+                delta += abs(val - val2)
+        for stop_beat in stop_beats:
+            after = [val for beat, val in bpms if beat <= stop_beat]
+            delta += after[-1] if after else bpms[0][1]
+        return delta
+
+    def _grStream(self, note, is_double):
+        npm = int((60.0 * self._sum1and2(note)) / self._songLenForRadar())
+        if npm <= 300:
+            return npm / 3
+        if is_double:
+            return (npm - 183) * 100 / 117
+        return (npm - 139) * 100 / 161
+
+    def _grVoltage(self, note):
+        # peak density = max steps in any 4 consecutive beats (not measures)
+        valid = ["1", "2", "4", "X", "x", "Y", "y", "S", "v", "M"]
+        beats = []
+        for measure in note:
+            per_beat = [0, 0, 0, 0]
+            for i, row in enumerate(measure):
+                if sum(row.count(x) for x in valid) >= 1:
+                    per_beat[int(i * 4 / len(measure))] += 1
+            beats.extend(per_beat)
+        avgbpm = 60.0 * len(beats) / self._songLenForRadar()
+        maxdensity = 0
+        for i in range(max(1, len(beats) - 3)):
+            maxdensity = max(maxdensity, sum(beats[i : i + 4]))
+        avg_peak_density = int(avgbpm * maxdensity / 4)
+        if avg_peak_density <= 600:
+            return avg_peak_density / 6
+        return (avg_peak_density + 594) * 100 / 1194
+
+    def _grAir(self, note, is_double):
+        jpm = int(
+            (60.0 * (self._sumJumps(note) + self._sumMines(note)))
+            / self._songLenForRadar()
+        )
+        if jpm <= 55:
+            return jpm * 20 / 11
+        if is_double:
+            return (jpm + 35) * 10 / 9
+        return (jpm + 36) * 100 / 91
+
+    def _grFreeze(self, note, is_double):
+        if not note:
+            return 0.0
+        # Use beat-domain lengths for denominator semantics.
+        freezelen_beats = 4.0 * self._sumFreezeTime(note)
+        song_beats = max(4.0 * len(note), 0.001)
+        farrowrate = int((10000.0 * freezelen_beats) / song_beats)
+        if farrowrate <= 3500:
+            return farrowrate / 35
+        if is_double:
+            return (farrowrate + 2246) * 100 / 5746
+        return (farrowrate + 2484) * 100 / 5984
+
+    def _grChaos(self, note, bpms, stops, is_double):
+        basechaos = self._chaosBaseValue(note)
+        totalbpmchange = self._totalBpmDelta(bpms, stops) if bpms else 0.0
+        bpmchangepm = 60.0 * totalbpmchange / self._songLenForRadar()
+        chaosdegree = basechaos * (1 + (bpmchangepm / 1500))
+        chaosunit = int(chaosdegree * 100 / self._songLenForRadar())
+        if chaosunit <= 2000:
+            return chaosunit / 20
+        if is_double:
+            return (chaosunit + 16628) * 100 / 18628
+        return (chaosunit + 21605) * 100 / 23605
 
     """
     TODO - calculate beats @ pre/post-bpms. If one of them is close to a nice number (1/3, 1/2, 1), then use it.
