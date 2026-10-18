@@ -1,7 +1,7 @@
 """
 Sync-bias analysis stage (`make sync`, run after `make parse`).
 
-For every song in all_songs.txt, fingerprint the audio against the chart
+For every scraped song not in removed.txt, fingerprint the audio against the chart
 timing (see classes/SyncAnalyzer.py) and attach the result to the song's
 build/songs/<name>.json under "sync" (per_chart songs: one block per
 charts[] entry instead).

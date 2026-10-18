@@ -52,7 +52,7 @@ while IFS= read -r name; do
 
     echo Copying simfile for $name
     cp "$sim" "$simfiles_dir/"
-done < $SEED_DIR/all_songs.txt
+done < <(ls "$BUILD_DIR/songs" | sed 's/\.json$//')
 
 while IFS= read -r name; do
     [[ -f "$jackets_full_dir/$name.png" && -f "$jackets_160_dir/$name.png" && -z $FORCE ]] && continue
@@ -82,7 +82,7 @@ while IFS= read -r name; do
     # 160x160 downscaled copy
     echo Downsizing jacket for $name from $png
     convert "$png" -resize 160x160 -quality 100 "$jackets_160_dir/$name.png"
-done < $SEED_DIR/all_songs.txt
+done < <(ls "$BUILD_DIR/songs" | sed 's/\.json$//')
 
 rm -f "$jacket_index"
 
@@ -95,4 +95,4 @@ rm -f "$jacket_index"
 7z a -tzip $BUILD_DIR/simfiles.zip -w $simfiles_dir/.
 
 # other files
-cp $SEED_DIR/all_songs.txt $SEED_DIR/removed.txt $BUILD_DIR/
+cp $SEED_DIR/removed.txt $BUILD_DIR/

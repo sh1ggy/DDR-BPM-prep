@@ -12,7 +12,7 @@ For small LDUR chart examples, see [the pattern reference](pattern-reference.md)
 From this repository, after `poetry install`:
 
 ```sh
-# Any SM/SSC file, independent of all_songs.txt and the full build.
+# Any SM/SSC file, independent of the song set and the full build.
 poetry run python src/analyze_patterns.py 'data/5th/ABSOLUTE/ABSOLUTE.sm' \
   --events --output build/analysis/absolute.json
 

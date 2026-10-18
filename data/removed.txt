@@ -4,6 +4,7 @@
 20,NOVEMBER (D.D.R. version)
 30 Lives (Up-Up-Down-Dance Mix)
 39
+59
 A LOVE LIKE THIS
 A MINUTE (EXTENDED MIX)
 A thing called LOVE
@@ -16,11 +17,13 @@ Ai kotoba
 Alstroemeria (walk with you remix)
 Always on My Mind
 Arifureta sekai seifuku
+Astra Blaze
 B4U glorious style
 BABY LOVE ME
 BAD GIRLS
 BAILA! BAILA!
 BALALAIKA,CARRIED WITH THE WIND
+BALLAD FOR YOU
 BALLAD THE FEATHERS (Chinese)
 BE TOGETHER
 BLUE IMPULSE ~for EXTREME~
@@ -57,11 +60,14 @@ CAPTIVE
 CARTOON HEROES (20th Anniversary Mix)
 CARTOON HEROES (Speedy Mix)
 CENTERFOLD(130BPM move it remix)
+COLOR BURST
 COME CLEAN
 COW GIRL
 CRASH!
 Che Che Chelip ~mahou no kotoba~
 Choo Choo TRAIN
+Cirno no perfect sansuu gakuen
+Cirno no perfect sansuu kyoushitsu
 Connect
 DA CAPO
 DAFT PUNK IS PLAYING AT MY HOUSE
@@ -84,6 +90,9 @@ DYNAMITE RAVE(Down Bird SOTA Mix)
 DYNAMITE RAVE(Long ver.)
 DYNAMITE RAVE-super euro version-
 DanDanDO(The true MAN's Road)
+Danzai no mimesis
+Dazzlin' Darlin-AKBKmix-
+Deadly Dolly Dance
 Do It Right
 Do It Right(Harmonized 2Step Mix)
 Dokusenyoku
@@ -135,10 +144,12 @@ HIGHS OFF U (Scorccio XY Mix)
 HOLD ON ME
 HOLIDAY
 HONEY PUNCH
+HORIZON BEATZ
 HOT LIMIT
 HOW TO PLAY
 HOW TO PLAY (English)
 HYPNOTIC CRISIS
+Hanenaki shoujo uta
 Happy
 Have You Never Been Mellow
 HeartLatte
@@ -169,20 +180,24 @@ INSERTiON(Machine Gun Kelly Mix)
 IRRESISTIBLEMENT
 IT ONLY TAKES A MINUTE (Extended Remix)
 IT'S RAINING MEN (Almighty Mix)
+Iro wa nio e do chirinuru wo
 JERK IT OUT
 JUPITER The Bringer of Jollity
 JUSTIFY MY LOVE
 Jam Jam Reggae
 JoJo ~Sono Chi no Sadame~
+KAGEROW (Dragonfly)
 KAKUMEI
 KEEP ON MOVIN'
 KEEP ON MOVIN' (Y&Co. DJ BOSS remix)
 KI SE KI (DDR EDIT)
 KICK THE CAN
+KISS KISS KISS AKBK MIX
 KUNG FU FIGHTING
 Kawasaki junjo ondo
 Keep On Liftin'
 Kind Lady
+King of Tribe
 Kiraijanaino
 Knock Out Regrets
 Koi
@@ -203,7 +218,6 @@ LOOK AT US (Daddy DJ Remix)
 LOVE & JOY
 LOVE & JOY -Risk Junk MIX-
 LOVE AT FIRSTSIGHT(TwinMasterplan Mix)
-LOVE THIS FEELIN'.zip
 LOVIN' YOU (ROB SEARLE CLUB MIX)
 LUCKY-YO!!
 LUV TO ME (AMD MIX)
@@ -248,6 +262,7 @@ Maware! Setsugetsuka
 Melody Life (Chinese)
 Memeshikute
 Mermaid
+Meteor Shower
 Mickey Mouse March(Eurobeat Version)
 Midnite Blaze
 More One Night
@@ -278,7 +293,6 @@ ORDINARY WORLD
 Orenai Heart
 Orion wo nazoru
 Otome no shinkocchou
-PARANOiA KCET ~clean mix~.zip
 PARANOiA MAX~DIRTY MIX~ (in roulette)
 PARANOiA MAX~DIRTY MIX~in roulette(X-Special)
 PEACE(^^)v
@@ -288,6 +302,7 @@ PUT YOUR FAITH IN ME (DA's Twinkly Disco Remix)
 Play Hard
 Put 'Em Up
 RIGHT NOW
+RIZING-GAMERS
 ROCK BEAT
 ROMANCE NO KAMISAMA
 Radical Faith
@@ -307,6 +322,7 @@ SEXY PLANET(FROM NONSTOP MEGAMIX)
 SHAKE YOUR BOOTY
 SHINY DAYS
 SHOOTING STAR
+SILKY BRAVE
 SKY HIGH (20th Anniversary Mix)
 SLoWMoTIoN
 SO DEEP (PERFECT SPHERE REMIX)
@@ -335,6 +351,7 @@ Strobe Girl
 Suki Melo
 Sukina koto dakede ii desu
 Super Driver
+Superior MAXXX
 Swingin'
 TELEPHONE OPERATOR (Club MIX)
 TENSHI
@@ -381,6 +398,7 @@ WHAT A WONDERFUL WORLD
 WITCH DOCTOR (GIANTS TOONS VERSION)
 WONDERLAND (UKS MIX)
 WOOKIE WOOKIE
+WOW WAR TONIGHT ~tokiniha okoseyo movement
 WWW.BLONDE GIRL (MOMO MIX)
 Wake Me Up
 We Come Alive
@@ -400,9 +418,9 @@ Youkoso Japari Park e
 Young Forever
 Your Rain(RAGE MIX)
 ZERO
+ZETA ~The World of Prime Numbers and the Transcendental Being~
 Zassou tamashii namen na yo!
 butterfly (UPSWING MIX)
-data/5th songs in folder but not in list
 e-motion
 feeling of love
 future gazer
