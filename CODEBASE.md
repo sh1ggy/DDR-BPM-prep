@@ -67,8 +67,7 @@ DDR-BPM-prep/
 │   ├── <VERSION>.zip        # One zip per DDR arcade release (WORLD, A3, A20 PLUS, … 1st)
 │   ├── <VERSION>/<SONG>/    # Unzipped song folders (simfile + artwork + audio)
 │   ├── arcade/              # Paste an arcade data dump here for the arcade stages (git-ignored)
-│   ├── all_songs.txt        # ★ Master list of every song currently in the game (~1,264)
-│   ├── removed.txt          # Songs that used to exist but were removed from the arcade
+│   ├── removed.txt          # ★ Scraped songs not in the game; every other scraped folder ships
 │   ├── title_map.csv        # Title spelling overrides used only for sorting (e.g. "IX" → "9")
 │   ├── dansp_courses.txt    # Dan course definitions, single-play
 │   ├── dandp_courses.txt    # Dan course definitions, double-play
@@ -199,23 +198,18 @@ parsing:
 
 ### 5.2 Pre-flight check: [check_songs.py](src/check_songs.py)
 
-Validates that `data/all_songs.txt` (the hand-maintained master song list) and the
-scraped folders agree, before wasting time parsing:
+The song set is every `data/<VERSION>/<SONG>/` folder holding a simfile, minus the
+names in `data/removed.txt` (`env.song_folders()`). Before parsing this checks:
 
-- Every listed song must exist as a folder **with exact case-sensitive spelling**
-  (`_checkFiles`; a case-insensitive match is reported as "found in …" to help fix it).
-- No song may appear twice in the list (`_checkDupesInList`).
-- No song may be in *both* `all_songs.txt` and `removed.txt`, and any folder on disk
-  that is in **neither** list is logged to `log/removed.txt` as a "suspected removed
-  song" (`_checkRemoved`) — the usual sign that Konami removed songs from the arcade
-  since the last run. Errors abort the pipeline.
+- No song name is scraped under two versions (an error; it would ship twice).
+- Every name in `removed.txt` is a scraped folder, **with exact spelling**; a typo
+  there would silently let the song through, so it's logged as a warning.
 
 ### 5.3 Main event: [parse_simfiles.py](src/parse_simfiles.py)
 
-The orchestrator. For every title in `all_songs.txt`:
+The orchestrator. For every song in `env.song_folders()`:
 
-1. **`loadSongs`** — locate the song's folder under `data/*/<title>` (erroring if
-   missing, warning if duplicated) and wrap it in a `SimfileRes` to discover whether
+1. **`loadSongs`** — wrap the song's folder in a `SimfileRes` to discover whether
    it uses `.sm` or `.ssc`. Records `{name, version, ssc}`.
 2. **`addChartData`** — run `SimfileParser` on the simfile and merge its output into
    the song dict: title info, song length, per-difficulty levels, and per-chart
@@ -368,7 +362,7 @@ which is not the app's use case (cabinet feel — see "Arcade sync" below, which
   identical timing.
 
 - **[sync_songs.py](src/sync_songs.py)** (`make sync`) — the driver. Iterates
-  `all_songs.txt` (same `loadSongs` as the parser), analyzes each song, and
+  the scraped song set (same `loadSongs` as the parser), analyzes each song, and
   merges a `sync` block into `build/songs/<name>.json` — top-level for shared
   timing, per `charts[]` entry for `per_chart` songs:
 
@@ -439,14 +433,14 @@ are kept locally. Pass song names to restrict the run; there is no cache.
 ## 7. Stage 4 — Deploy (`Makefiles/deploy.mk` + `scripts/deploy/`)
 
 - **[predeploy.sh](scripts/deploy/predeploy.sh)** — builds the release artefacts:
-  1. For every song in `all_songs.txt`, find its `-jacket.png` in `data/`, copy it to
+  1. For every song parsed into `build/songs/`, find its `-jacket.png` in `data/`, copy it to
     `build/jackets/` (full resolution), and use ImageMagick `convert` to create a
     160×160 version in `build/jackets-160/` (skipping ones already done unless
     `FORCE=Y`, i.e. `make predeploy-force`). A missing or ambiguous jacket aborts
     the run.
   2. Zip `build/songs/` → `build/songs.zip`, `build/jackets-160/` → `build/jackets.zip`,
     and `build/jackets/` → `build/jackets-full.zip` (7z).
-  3. Copy `all_songs.txt` and `removed.txt` into `build/` so they ship with the release.
+  3. Copy `removed.txt` into `build/` so it ships with the release.
 
 - **[release.sh](scripts/deploy/release.sh)** (`make release`) — after an interactive
   y/n confirmation, deletes the existing GitHub release tagged `Latest` and creates a
@@ -462,8 +456,7 @@ them, and `check_songs.py` exists to keep them honest:
 
 | File | Role |
 |---|---|
-| `all_songs.txt` | One song-folder name per line; the definitive "what's in the game right now" list (~1,264 songs). Parsing iterates over this, not over the folders, so a song only ships if it's listed here. Must end with a newline. |
-| `removed.txt` | Songs deliberately absent from `all_songs.txt`. Suppresses "suspected removed" noise and ships with the release so the app can hide them. |
+| `removed.txt` | One song-folder name per line: scraped songs that aren't in the game (removed from the arcade, or never released on it). Every other scraped folder ships, so a new scrape adds its songs with no list to edit. Kept in byte order (`LC_ALL=C sort`). |
 | `title_map.csv` | `old,new` sorting overrides (full-width text, Roman numerals, decorated titles → sortable spellings). Only affects `songs_name.json` ordering. |
 | `*_courses.txt` | Course definitions described in §5.7. |
 
@@ -474,8 +467,8 @@ them, and `check_songs.py` exists to keep them honest:
 Konami releases a new song, or removes some:
 
 1. `make full_scrape` — refresh the packs from Zenius-I-Vanisher.
-2. Edit `data/all_songs.txt` (add new songs) and `data/removed.txt` (move removed
-   ones). `log/removed.txt` from the next step tells you what changed.
+2. Add songs Konami removed to `data/removed.txt`. New songs need nothing: every
+   scraped folder ships unless it's listed there.
 3. `make parse` — fix.sh patches known-bad files, `check_songs.py` validates your
    edits, then the song and course JSON are rebuilt into `build/`.
 4. `make load` — optional: poke at the `songs` list in a REPL to spot-check a song
@@ -492,7 +485,7 @@ Konami releases a new song, or removes some:
 ## 10. Odds and ends
 
 - **Logging** — everything logs to `log/log.txt` (fresh each run, INFO level);
-  removal suspects go to `log/removed.txt`. When something fails, look there first —
+  When something fails, look there first —
   the code often raises a bare `RuntimeError` and expects the log to explain why.
 - **Python setup** — Poetry-managed, Python ≥ 3.11. The heavyweight dependencies are
   `simfile` (parsing), `PyICU` (Japanese collation — needs the system ICU libraries,

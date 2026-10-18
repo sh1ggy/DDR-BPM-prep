@@ -13,21 +13,7 @@ def loadSongs(songs: list[dict]) -> None:
     """
     load song file-info into "songs" in-place
     """
-    with open(env.allsongs_file, "r") as file:
-        titles = list(map(lambda line: line.strip(), file))
-
-    for title in titles:
-        folders = glob.glob(str(env.seed_dir) + "/*/" + glob.escape(title))
-        if not folders:
-            env.logger.error(f"{title} not found in {env.seed_dir}")
-            raise RuntimeError
-
-        if len(folders) > 1:
-            env.logger.warning(f"Duplicates ({len(folders)}): {title}")
-            for folder in folders:
-                env.logger.warning(f"\t{folder}")
-
-        path = Path(folders.pop())
+    for path in env.song_folders():
         res = SimfileRes(path)
 
         song = {"ssc": res.ssc, "version": path.parent.name, "name": path.name}

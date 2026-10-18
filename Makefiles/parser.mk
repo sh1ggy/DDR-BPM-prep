@@ -12,7 +12,7 @@ courses:
 # check for duplicates, missing songs, etc.
 check_songs: fix clean
 	$(info ################################################################################)
-	$(info # 1. Make sure all_songs.txt has ending new line)
+	$(info # 1. Make sure removed.txt lists every scraped song not in the game)
 	$(info # 2. Make sure you ran a full scrape: make full_scrape)
 	$(info ################################################################################)
 	poetry run python $(SRC_DIR)/check_songs.py

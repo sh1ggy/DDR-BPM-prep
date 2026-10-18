@@ -28,13 +28,31 @@ for folder in [
 
 seed_dir = Path(getenv("SEED_DIR") or "./data")
 arcade_dir = seed_dir / "arcade"
-allsongs_file = str(seed_dir / "all_songs.txt")
 removed_file = str(seed_dir / "removed.txt")
 title_map_file = str(seed_dir / "title_map.csv")
 dansp_courses_file = str(seed_dir / "dansp_courses.txt")
 dandp_courses_file = str(seed_dir / "dandp_courses.txt")
 ddr_courses_file = str(seed_dir / "ddr_courses.txt")
 life4_courses_file = str(seed_dir / "life4_courses.txt")
+
+
+def song_folders() -> list[Path]:
+    """
+    Every scraped song: each <version>/<song> folder holding a simfile, minus
+    the names in removed.txt. A name scraped under two versions is an error.
+    """
+    with open(removed_file, "r") as file:
+        removed = {line.strip() for line in file if line.strip()}
+    folders: dict[str, Path] = {}
+    for folder in sorted(seed_dir.glob("*/*")):
+        if folder.name in removed or not (
+            any(folder.glob("*.sm")) or any(folder.glob("*.ssc"))
+        ):
+            continue
+        if folder.name in folders:
+            raise RuntimeError(f"{folder.name} in both {folders[folder.name]} and {folder}")
+        folders[folder.name] = folder
+    return [folders[name] for name in sorted(folders)]
 
 
 log_folder = Path("./log")
