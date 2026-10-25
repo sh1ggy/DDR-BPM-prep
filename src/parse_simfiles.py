@@ -5,6 +5,7 @@ from classes.SimfileRes import SimfileRes
 from classes.SimfileParser import SimfileParser
 
 from pathlib import Path
+import csv
 import glob
 import sys
 
@@ -13,10 +14,22 @@ def loadSongs(songs: list[dict]) -> None:
     """
     load song file-info into "songs" in-place
     """
+    konami_ids = {}
+    if Path(env.konami_file).exists():
+        with open(env.konami_file, newline="") as file:
+            konami_ids = {
+                row["name"]: row["konami_id"]
+                for row in csv.DictReader(file, delimiter="\t")
+                if row["name"]
+            }
+    else:
+        env.logger.warning("No data/konami.tsv: songs get no konami_id (make konami_music)")
     for path in env.song_folders():
         res = SimfileRes(path)
 
         song = {"ssc": res.ssc, "version": path.parent.name, "name": path.name}
+        if path.name in konami_ids:
+            song["konami_id"] = konami_ids[path.name]
         songs.append(song)
 
 

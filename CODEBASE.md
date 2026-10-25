@@ -69,6 +69,7 @@ DDR-BPM-prep/
 │   ├── arcade/              # Paste an arcade data dump here for the arcade stages (git-ignored)
 │   ├── removed.txt          # ★ Scraped songs not in the game; every other scraped folder ships
 │   ├── title_map.csv        # Title spelling overrides used only for sorting (e.g. "IX" → "9")
+│   ├── konami.tsv           # Konami song ID → prep song name (git-ignored; make konami_music)
 │   ├── dansp_courses.txt    # Dan course definitions, single-play
 │   ├── dandp_courses.txt    # Dan course definitions, double-play
 │   ├── ddr_courses.txt      # Official DDR in-game courses
@@ -457,6 +458,7 @@ them, and `check_songs.py` exists to keep them honest:
 | File | Role |
 |---|---|
 | `removed.txt` | One song-folder name per line: scraped songs that aren't in the game (removed from the arcade, or never released on it). Every other scraped folder ships, so a new scrape adds its songs with no list to edit. Kept in byte order (`LC_ALL=C sort`). |
+| `konami.tsv` | Git-ignored; `make konami_music` rebuilds it (`-l`: from the pages saved in `build/konami/`, no fetch). Every song in DDR WORLD by Konami's own song ID (`konami_id`, Konami's `title`, prep `name`, `zenius_id`). A row with a `name` puts `"konami_id"` into that song's JSON, which is what the app matches synced scores on; a row without one is a song in the game with no simfile yet. A rebuild keeps names already set, so hand picks between same-title songs survive. Run it after `make parse`, then parse again. |
 | `title_map.csv` | `old,new` sorting overrides (full-width text, Roman numerals, decorated titles → sortable spellings). Only affects `songs_name.json` ordering. |
 | `*_courses.txt` | Course definitions described in §5.7. |
 
@@ -468,7 +470,8 @@ Konami releases a new song, or removes some:
 
 1. `make full_scrape` — refresh the packs from Zenius-I-Vanisher.
 2. Add songs Konami removed to `data/removed.txt`. New songs need nothing: every
-   scraped folder ships unless it's listed there.
+   scraped folder ships unless it's listed there. `make konami_music` links them in
+   `data/konami.tsv`; name any it lists as having no prep song.
 3. `make parse` — fix.sh patches known-bad files, `check_songs.py` validates your
    edits, then the song and course JSON are rebuilt into `build/`.
 4. `make load` — optional: poke at the `songs` list in a REPL to spot-check a song

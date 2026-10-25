@@ -9,3 +9,6 @@ build/
 log/*.txt
 
 .DS_Store
+
+# Konami song table, rebuilt by make konami_music
+data/konami.tsv

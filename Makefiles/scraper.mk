@@ -17,3 +17,8 @@ dedupe:
 
 unzip:
 	bash $(PROJ_DIR)/scripts/scrape/unzip_pack.sh
+
+# Rebuild data/konami.tsv (Konami song ID -> prep song) from the e-amusement pages; run after parse.
+# Needs the session cookie in the Keychain; see src/konami_music.py.
+konami_music:
+	poetry run python $(SRC_DIR)/konami_music.py
