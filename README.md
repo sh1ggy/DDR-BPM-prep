@@ -180,3 +180,16 @@ Outputs:
 - Use `ptpython` for a better REPL (see [official repo](https://github.com/prompt-toolkit/ptpython?tab=readme-ov-file#embedding-the-repl) on setting up a PYTHONSTARTUP).
 
 # Improvements Ideas
+
+## Calculated scoring tiers
+
+After parsing and the final timing stages, run `make tiers` before copying songs
+into the content repo. `make main` includes this stage before `predeploy`.
+For a single song or chart fix, use `make tiers SONG='Exact song ID'`.
+`make tiers-check` rejects stale annotations, and release staging runs it too.
+
+This uses a separate pinned Python 3.12 environment and versioned model bundle
+from the app checkout. See `../tool/scoring/README.md` for setup, conformance,
+container use and release gates. Override `DDR_MD_DIR`, `SCORING_PYTHON` and
+`SCORING_BUNDLE` when using another pinned checkout. The incremental cache and
+coverage inventory live in `build/scoring-cache/` and survive `make clobber`.

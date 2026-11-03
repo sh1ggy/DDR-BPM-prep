@@ -1,5 +1,5 @@
 
-predeploy:
+predeploy: tiers-check
 	bash $(PROJ_DIR)/scripts/deploy/predeploy.sh
 
 predeploy-force: export FORCE=Y
