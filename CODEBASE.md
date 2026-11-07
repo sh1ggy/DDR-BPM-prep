@@ -42,11 +42,11 @@ DDR-BPM-prep/
 │   ├── scraper.mk           # Stage 1 targets: full_scrape, scrape_packs, scrape_songs, unzip, dedupe
 │   ├── parser.mk            # Stage 2 targets: parse, songs, courses, check_songs, fix, load, write
 │   ├── sync.mk              # Stage 3 targets: sync, sync-force, arcade_sync, arcade_sync-force, arcade_timesigs, unzip_audio, clobber_sync, clobber_arcade_sync
-│   └── deploy.mk            # Stage 4 targets: predeploy, predeploy-force
+│   └── jackets.mk           # Stage 4 targets: jackets, jackets-force
 ├── scripts/
 │   ├── scrape/              # Stage 1 shell scripts (download/unzip/dedupe)
 │   ├── parse/               # fix.sh — one-off surgical fixes to broken simfiles
-│   └── deploy/              # predeploy.sh (build artefacts), release.sh (GitHub release)
+│   └── deploy/              # jackets.sh (full-res + 160 jackets)
 ├── src/                     # Stage 2+3 Python code (the heart of the project)
 │   ├── env.py               # Paths, directories, logging setup — imported by everything
 │   ├── utils.py             # JSON I/O, song lookup, Japanese/English title sorting
@@ -81,8 +81,8 @@ DDR-BPM-prep/
 │   ├── arcade_sync/         # Cached arcade sync results, keyed by arcade basename (e.g. tlov.json)
 │   ├── summaries/           # summary.json + grouped indexes (by name/version/level)
 │   ├── courses/             # dan_sp.json, dan_dp.json, ddr.json, life4.json
-│   ├── jackets/             # full-resolution jacket art (predeploy output)
-│   ├── jackets-160/         # 160×160 downscaled jacket art (predeploy output)
+│   ├── jackets/             # full-resolution jacket art (jackets output)
+│   ├── jackets-160/         # 160×160 downscaled jacket art (jackets output)
 │   └── *.zip                # songs.zip, jackets.zip, jackets-full.zip — release artefacts
 ├── log/                     # log.txt (main log), removed.txt (removal suspects)
 ├── pyproject.toml           # Poetry project; Python ^3.11
@@ -123,9 +123,10 @@ three stage makefiles. Key targets:
 | `make sync` | Sync | `unzip_audio`, then fingerprint audio vs. chart timing and merge `sync` into song JSON (`sync-force` recomputes cached results) |
 | `make arcade_sync` | Sync | Fingerprint arcade `.ssq` timing vs. `.xwb` audio from a dump in `data/arcade/` and merge `arcade_sync` into song JSON (no-op without the dump; `arcade_sync-force` recomputes) |
 | `make arcade_timesigs` | Sync | Read each song's time signatures from locally supplied chart data and merge `time_signatures` into song JSON for songs that aren't plain 4/4 (no-op without the dump; cheap, no cache) |
-| `make predeploy` | Deploy | Stage full-res + 160 jackets, zip artefacts (`FORCE=Y` via `predeploy-force` to redo images) |
-| `make release` | Deploy | Push `build/*.zip` + song lists as the GitHub release tagged `Latest` |
-| `make main` | All | `clobber` → `parse` → `arcade_sync` → `arcade_timesigs` → `predeploy` (the everything-after-scraping shortcut; simfile `sync` is opt-in, run it explicitly if wanted) |
+| `make jackets` | Deploy | Stage full-res + 160 jackets (`FORCE=Y` via `jackets-force` to redo images) |
+| `make prepare` | All | `parse` → simfile `sync` and `arcade_sync` (cached) → `arcade_timesigs` → `tiers` → `jackets`: the content repo's shape. On unchanged inputs it reproduces the live content |
+| `make main` | All | `clobber`, then `prepare` (the clobber deletes the pack zips) |
+| `make admin` | All | The release console (§7): the only way to run these for a release, and to release |
 | `make clean` / `make clobber` | — | Delete logs / also delete inner zips and built JSON (the `build/sync/` cache is spared; use `make clobber_sync`) |
 
 ---
@@ -431,24 +432,25 @@ are kept locally. Pass song names to restrict the run; there is no cache.
 
 ---
 
-## 7. Stage 4 — Deploy (`Makefiles/deploy.mk` + `scripts/deploy/`)
+## 7. Stage 4 — Jackets and releasing
 
-- **[predeploy.sh](scripts/deploy/predeploy.sh)** — builds the release artefacts:
-  1. For every song parsed into `build/songs/`, find its `-jacket.png` in `data/`, copy it to
-    `build/jackets/` (full resolution), and use ImageMagick `convert` to create a
-    160×160 version in `build/jackets-160/` (skipping ones already done unless
-    `FORCE=Y`, i.e. `make predeploy-force`). A missing or ambiguous jacket aborts
-    the run.
-  2. Zip `build/songs/` → `build/songs.zip`, `build/jackets-160/` → `build/jackets.zip`,
-    and `build/jackets/` → `build/jackets-full.zip` (7z).
-  3. Copy `removed.txt` into `build/` so it ships with the release.
+- **[jackets.sh](scripts/deploy/jackets.sh)** (`make jackets`) — for every song
+  parsed into `build/songs/`, finds its `-jacket.png` in `data/`, copies it to
+  `build/jackets/` (full resolution) and makes a 160×160 copy in
+  `build/jackets-160/` (skipping ones already done unless `FORCE=Y`). A missing
+  or ambiguous jacket aborts the run.
 
-- **[release.sh](scripts/deploy/release.sh)** (`make release`) — after an interactive
-  y/n confirmation, deletes the existing GitHub release tagged `Latest` and creates a
-  fresh one (via `gh`) containing `build/*.txt` and `build/*.zip`. The downstream
-  app always fetches "Latest", so the tag is recycled rather than versioned.
-
----
+- **The release console** ([admin/](admin/), `make admin`) — the one way to
+  prepare and release content to the app. It serves a page on 127.0.0.1, and
+  `poetry run python -m admin` is the same actions as a CLI. It runs the jobs
+  above with logs, shows what the build changes in chart terms against the live
+  content, edits the seed files (committing each edit), and makes releases:
+  draft (copies the chosen songs' four files into the content repo and writes
+  `release.json`), checks, staging (pushes the content repo's `staging` branch
+  and opens a PR), sign-off (records how it was tested and the tested manifest
+  id, then fast-forwards `master`), history and rollback. The content repo's
+  CI refuses to publish anything without a matching `release.json`. Activity
+  and job logs are kept in `log/admin/` (gitignored).
 
 ## 8. The seed data files (hand-maintained inputs)
 
@@ -466,24 +468,21 @@ them, and `check_songs.py` exists to keep them honest:
 
 ## 9. How a change typically flows (worked example)
 
-Konami releases a new song, or removes some:
+Konami releases a new song, or removes some. All of it happens in the console
+(`make admin`):
 
-1. `make full_scrape` — refresh the packs from Zenius-I-Vanisher.
-2. Add songs Konami removed to `data/removed.txt`. New songs need nothing: every
-   scraped folder ships unless it's listed there. `make konami_music` links them in
-   `data/konami.tsv`; name any it lists as having no prep song.
-3. `make parse` — fix.sh patches known-bad files, `check_songs.py` validates your
-   edits, then the song and course JSON are rebuilt into `build/`.
-4. `make load` — optional: poke at the `songs` list in a REPL to spot-check a song
-   (`locSong(summary, "paranoia")`).
-5. `make arcade_sync arcade_timesigs` — with the dump in `data/arcade/`, merge
-   the cabinet sync and time signatures back into the freshly parsed song JSON
-   (`make parse` rewrites `build/songs/`, so these must run after every parse;
-   `make main` does it for you). `make sync` (simfile sync) is optional.
-6. `make predeploy` — stage any new full-res/160 jackets, rebuild the zips.
-7. `make release` — replace the `Latest` GitHub release; the DDR-BPM app picks it up.
-
----
+1. **Inbox** lists songs in the game with no simfile yet (from `konami.tsv`).
+   Give one its Zenius simfile id to scrape it; **Maintenance** runs a full
+   pack scrape and the Konami list refresh.
+2. Songs Konami removed: **Exclude** adds them to `data/removed.txt` (and
+   commits). New songs need nothing: every scraped folder ships unless it's
+   listed there.
+3. **Prepare everything** runs `make prepare`. The inbox then shows the songs
+   that are built but not live, and live songs whose build differs, change by
+   change.
+4. Pick songs and **draft** a release. **Run checks**, **publish to staging**,
+   test it on a phone set to staging, then **sign off**: that makes it live.
+   **History** rolls back to any earlier release the same way.
 
 ## 10. Odds and ends
 

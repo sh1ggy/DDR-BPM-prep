@@ -159,13 +159,23 @@ to re-analyze a subset: `poetry run python src/sync_songs.py "CHAOS"`.
 make load
 ```
 
-### Build assets for deployment
-This stages jacket assets in both full resolution and 160x160 variants.
+### Release console
+Everything after scraping, and every release, goes through the console:
 ```shell
-make predeploy
+make admin
 ```
+It prints a localhost link. `poetry run python -m admin --help` is the same
+actions as a CLI. It runs `make prepare` (parse, sync, arcade sync, time
+signatures, tiers, jackets), shows what the build changes in chart terms,
+drafts a release into the content repo, publishes it to staging, and makes it
+live once you've signed it off. Copying files into the content repo and
+pushing by hand isn't a release: CI won't publish it.
 
-`predeploy` resolves jacket images by exact `-jacket.png` name first, then
+### Jackets
+`make jackets` stages jacket assets in both full resolution and 160x160 variants
+(`prepare` runs it).
+
+`jackets` resolves jacket images by exact `-jacket.png` name first, then
 falls back to normalized matching (ignores punctuation/symbol differences) when
 copying/downscaling. This helps keep output stable even when source jacket file
 names differ slightly from song names.
@@ -173,7 +183,6 @@ names differ slightly from song names.
 Outputs:
 - `build/jackets/` (full resolution, renamed to `<song>.png`)
 - `build/jackets-160/` (downscaled 160x160)
-- `build/jackets-full.zip` and `build/jackets.zip`
 
 # Quality of Life
 - Use `ipdb.set_trace()` for debugging.
@@ -183,8 +192,8 @@ Outputs:
 
 ## Calculated scoring tiers
 
-After parsing and the final timing stages, run `make tiers` before copying songs
-into the content repo. `make main` includes this stage before `predeploy`.
+After parsing and the final timing stages, `make tiers` rates the charts.
+`make prepare` (and so the console) includes this stage before `jackets`.
 For a single song or chart fix, use `make tiers SONG='Exact song ID'`.
 `make tiers-check` rejects stale annotations, and release staging runs it too.
 
