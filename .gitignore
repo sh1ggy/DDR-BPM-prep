@@ -12,3 +12,6 @@ log/*.txt
 
 # Konami song table, rebuilt by make konami_music
 data/konami.tsv
+
+# Release console activity and job logs
+log/admin/

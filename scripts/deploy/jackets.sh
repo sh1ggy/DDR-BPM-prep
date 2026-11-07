@@ -1,4 +1,7 @@
 #!/bin/bash
+# Stage each parsed song's jacket as build/jackets/<name>.png (full
+# resolution) and build/jackets-160/<name>.png (160x160), the two the content
+# repo publishes. Existing ones are kept unless FORCE is set.
 SEED_DIR=${SEED_DIR:-./data}
 BUILD_DIR=${BUILD_DIR:-./build}
 
@@ -6,27 +9,10 @@ normalize_name() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g'
 }
 
-# Jacket outputs
 jackets_full_dir=$BUILD_DIR/jackets
 jackets_160_dir=$BUILD_DIR/jackets-160
 mkdir -p $jackets_full_dir
 mkdir -p $jackets_160_dir
-
-# Copy audio previews
-audio_dir=$BUILD_DIR/audio
-mkdir -p $audio_dir
-
-while IFS= read -r ogg; do
-    name=$(basename "$ogg" .ogg)
-    [[ -f "$audio_dir/$name-song.ogg" && -z $FORCE ]] && continue
-
-    echo Copying audio for $name
-    cp "$ogg" "$audio_dir/$name-song.ogg"
-done < <(find $SEED_DIR -type f -name "*.ogg")
-
-# Copy simfiles
-simfiles_dir=$BUILD_DIR/simfiles
-mkdir -p $simfiles_dir
 
 OIFS="$IFS"
 IFS=$'\n'
@@ -39,20 +25,6 @@ while IFS= read -r p; do
     n=$(normalize_name "$b")
     echo "$n|$p" >> "$jacket_index"
 done < <(find "$SEED_DIR" -type f -name "*-jacket.png")
-
-while IFS= read -r name; do
-    [[ ( -f "$simfiles_dir/$name.sm" || -f "$simfiles_dir/$name.ssc" ) && -z $FORCE ]] && continue
-
-    search_name=$(echo $name | sed -e 's:\[:\\[:g' -e 's:]:\\]:g') # escape square brackets
-    # prefer .sm over .ssc, same as SimfileRes.findSimfile
-    sim=$(find $SEED_DIR -type f -name "$search_name.sm")
-    [[ -z $sim ]] && sim=$(find $SEED_DIR -type f -name "$search_name.ssc")
-    [[ -z $sim ]] && echo "$name simfile not found" && exit 1
-    [[ $(echo "$sim" | wc -l) -gt 1 ]] && printf "Multiple found for %s:\n\t%s\n" "$name" "$sim" && exit 1
-
-    echo Copying simfile for $name
-    cp "$sim" "$simfiles_dir/"
-done < <(ls "$BUILD_DIR/songs" | sed 's/\.json$//')
 
 while IFS= read -r name; do
     [[ -f "$jackets_full_dir/$name.png" && -f "$jackets_160_dir/$name.png" && -z $FORCE ]] && continue
@@ -75,24 +47,11 @@ while IFS= read -r name; do
     [[ -z $png ]] && echo "$name jacket not found (exact or normalized)" && exit 1
     [[ $(echo "$png" | wc -l) -gt 1 ]] && printf "Multiple found for %s:\n\t%s\n" "$name" "$png" && exit 1
 
-    # Full-resolution copy
     echo Copying full-res jacket for $name from $png
     cp "$png" "$jackets_full_dir/$name.png"
 
-    # 160x160 downscaled copy
     echo Downsizing jacket for $name from $png
     convert "$png" -resize 160x160 -quality 100 "$jackets_160_dir/$name.png"
 done < <(ls "$BUILD_DIR/songs" | sed 's/\.json$//')
 
 rm -f "$jacket_index"
-
-
-# Zip
-7z a -tzip $BUILD_DIR/songs.zip -w $BUILD_DIR/songs/.
-7z a -tzip $BUILD_DIR/steps.zip -w $BUILD_DIR/steps/.
-7z a -tzip $BUILD_DIR/jackets.zip -w $jackets_160_dir/.
-7z a -tzip $BUILD_DIR/jackets-full.zip -w $jackets_full_dir/.
-7z a -tzip $BUILD_DIR/simfiles.zip -w $simfiles_dir/.
-
-# other files
-cp $SEED_DIR/removed.txt $BUILD_DIR/
